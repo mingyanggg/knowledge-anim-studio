@@ -60,7 +60,7 @@ const isGenerating = ref(false);
 const activeJob = ref<jobManager.Job | null>(null);
 const jobProgress = computed(() => activeJob.value?.progress ?? 0);
 const jobMessage = computed(() => activeJob.value?.message ?? "");
-const jobStatus = computed(() => activeJob.value?.status ?? "idle");
+
 
 // 输入时实时分析
 watch(description, () => {
