@@ -1,9 +1,9 @@
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
-import { templates, type Template } from "../data/templates";
+import { ref } from "vue";
+import { templates as templateData, type Template } from "../data/templates";
 
 export const useTemplateStore = defineStore("template", () => {
-  const templates = ref<Template[]>(templates);
+  const templates = ref<Template[]>(templateData);
 
   const getTemplateById = (id: string) => {
     return templates.value.find(t => t.id === id);

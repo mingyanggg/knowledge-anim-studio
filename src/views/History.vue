@@ -1,130 +1,136 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
+import { useGenerateStore } from "../stores/generateStore";
+
+const router = useRouter();
+const generateStore = useGenerateStore();
 
 interface HistoryItem {
   id: string;
-  title: string;
   description: string;
-  thumbnail: string;
-  createdAt: string;
-  duration: number;
-  status: "completed" | "rendering" | "failed";
+  templateId: string;
+  templateTitle: string;
+  timestamp: number;
+  status: "completed" | "failed";
 }
 
-const mockHistory: HistoryItem[] = [
-  {
-    id: "1",
-    title: "勾股定理证明",
-    description: "演示勾股定理的几何证明过程",
-    thumbnail: "📐",
-    createdAt: "2024-03-25 14:30",
-    duration: 30,
-    status: "completed",
-  },
-  {
-    id: "2",
-    title: "牛顿第二定律",
-    description: "F = ma 动画演示",
-    thumbnail: "🍎",
-    createdAt: "2024-03-24 16:45",
-    duration: 45,
-    status: "completed",
-  },
-  {
-    id: "3",
-    title: "化学键形成",
-    description: "离子键和共价键的可视化",
-    thumbnail: "⚗️",
-    createdAt: "2024-03-23 10:20",
-    duration: 35,
-    status: "completed",
-  },
-];
+const historyItems = ref<HistoryItem[]>([]);
+const filterStatus = ref<"all" | "completed" | "failed">("all");
 
-const historyItems = ref<HistoryItem[]>(mockHistory);
-const filterStatus = ref<"all" | "completed" | "rendering" | "failed">("all");
+const STORAGE_KEY = "anim-history";
+
+/** 从 localStorage 加载历史 */
+const loadHistory = () => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      historyItems.value = JSON.parse(saved);
+    }
+  } catch {
+    historyItems.value = [];
+  }
+};
+
+/** 保存历史到 localStorage */
+const saveHistory = () => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(historyItems.value));
+};
+
+onMounted(() => {
+  loadHistory();
+  // 如果 generateStore 有未保存的生成记录，同步过来
+  for (const item of generateStore.history) {
+    if (!historyItems.value.find(h => h.timestamp === item.timestamp)) {
+      historyItems.value.push({
+        id: `h-${item.timestamp}`,
+        description: item.description,
+        templateId: "",
+        templateTitle: "",
+        timestamp: item.timestamp,
+        status: "completed",
+      });
+    }
+  }
+  saveHistory();
+});
 
 const filteredItems = computed(() => {
   if (filterStatus.value === "all") return historyItems.value;
   return historyItems.value.filter(item => item.status === filterStatus.value);
 });
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   all: "全部",
   completed: "已完成",
-  rendering: "渲染中",
   failed: "失败",
 };
 
-const handleDelete = (id: string) => {
-  const index = historyItems.value.findIndex(item => item.id === id);
-  if (index !== -1) {
-    historyItems.value.splice(index, 1);
-  }
+/** 格式化时间 */
+const formatTime = (ts: number) => {
+  const d = new Date(ts);
+  return d.toLocaleString("zh-CN", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit",
+  });
 };
 
+/** 删除单条记录 */
+const handleDelete = (id: string) => {
+  historyItems.value = historyItems.value.filter(item => item.id !== id);
+  saveHistory();
+};
+
+/** 清空全部 */
 const handleClearAll = () => {
   if (confirm("确定要清空所有历史记录吗？")) {
     historyItems.value = [];
+    saveHistory();
   }
+};
+
+/** 点击记录跳转到生成页并预填充 */
+const handleView = (item: HistoryItem) => {
+  router.push({ path: "/generate", query: { desc: item.description } });
 };
 </script>
 
 <template>
   <div class="history-page">
-    <!-- Header -->
     <header class="page-header">
       <h2 class="page-title">历史记录</h2>
-      <p class="page-subtitle">查看和管理你的渲染历史</p>
+      <p class="page-subtitle">查看和管理你的生成历史</p>
     </header>
 
-    <!-- Filter Tabs -->
+    <!-- 筛选标签 -->
     <div class="filter-tabs">
       <button
         v-for="(label, key) in statusLabels"
         :key="key"
         class="filter-tab"
         :class="{ active: filterStatus === key }"
-        @click="filterStatus = key as any"
+        @click="filterStatus = key as 'all' | 'completed' | 'failed'"
       >
         {{ label }}
       </button>
     </div>
 
-    <!-- History Grid -->
+    <!-- 列表 -->
     <div v-if="filteredItems.length > 0" class="history-grid">
-      <div
-        v-for="item in filteredItems"
-        :key="item.id"
-        class="history-card"
-      >
-        <div class="card-thumbnail">
-          <span class="thumbnail-emoji">{{ item.thumbnail }}</span>
-          <span class="status-badge" :class="item.status">
-            {{ statusLabels[item.status] }}
-          </span>
-        </div>
-
+      <div v-for="item in filteredItems" :key="item.id" class="history-card">
         <div class="card-content">
-          <h3 class="card-title">{{ item.title }}</h3>
-          <p class="card-description">{{ item.description }}</p>
-
-          <div class="card-meta">
-            <span class="meta-item">📅 {{ item.createdAt }}</span>
-            <span class="meta-item">⏱️ {{ item.duration }}秒</span>
+          <div class="card-header">
+            <span class="status-badge" :class="item.status">
+              {{ item.status === "completed" ? "✅" : "❌" }}
+            </span>
+            <span class="card-time">{{ formatTime(item.timestamp) }}</span>
           </div>
-
+          <p class="card-description">{{ item.description }}</p>
           <div class="card-actions">
-            <button class="action-button primary">
-              📂 查看
+            <button class="action-button primary" @click="handleView(item)">
+              📂 重新生成
             </button>
-            <button class="action-button secondary">
-              📤 导出
-            </button>
-            <button
-              class="action-button danger"
-              @click="handleDelete(item.id)"
-            >
+            <button class="action-button danger" @click="handleDelete(item.id)">
               🗑️ 删除
             </button>
           </div>
@@ -132,17 +138,17 @@ const handleClearAll = () => {
       </div>
     </div>
 
-    <!-- Empty State -->
+    <!-- 空状态 -->
     <div v-else class="empty-state">
       <span class="empty-icon">📭</span>
-      <h3>暂无历史记录</h3>
-      <p>开始创建你的第一个动画吧！</p>
-      <button class="create-button" @click="$router.push('/generate')">
-        ✨ 开始创建
+      <h3>还没有生成记录</h3>
+      <p>去创作你的第一个动画吧</p>
+      <button class="create-button" @click="router.push('/generate')">
+        ✨ 开始创作
       </button>
     </div>
 
-    <!-- Clear All Button -->
+    <!-- 清空按钮 -->
     <div v-if="historyItems.length > 0" class="clear-section">
       <button class="clear-button" @click="handleClearAll">
         🗑️ 清空所有记录
@@ -153,7 +159,7 @@ const handleClearAll = () => {
 
 <style scoped>
 .history-page {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -163,7 +169,7 @@ const handleClearAll = () => {
 
 .page-title {
   font-size: 2rem;
-   font-weight: 700;
+  font-weight: 700;
   margin: 0 0 0.5rem 0;
   background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
   -webkit-background-clip: text;
@@ -181,8 +187,6 @@ const handleClearAll = () => {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 2rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
 }
 
 .filter-tab {
@@ -210,142 +214,87 @@ const handleClearAll = () => {
 }
 
 .history-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .history-card {
   background-color: #1a1a2e;
   border: 1px solid #2a2a4a;
   border-radius: 0.75rem;
-  overflow: hidden;
-  transition: all 0.2s;
+  padding: 1rem;
+  transition: border-color 0.2s;
 }
 
 .history-card:hover {
   border-color: #00d4ff;
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.15);
-}
-
-.card-thumbnail {
-  aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, #1a1a2e 0%, #2a2a4a 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.thumbnail-emoji {
-  font-size: 4rem;
-}
-
-.status-badge {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  padding: 0.25rem 0.75rem;
-  border-radius: 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.status-badge.completed {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
-}
-
-.status-badge.rendering {
-  background-color: rgba(0, 212, 255, 0.2);
-  color: #00d4ff;
-}
-
-.status-badge.failed {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
 }
 
 .card-content {
-  padding: 1rem;
-}
-
-.card-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #ffffff;
-  margin: 0 0 0.5rem 0;
-}
-
-.card-description {
-  font-size: 0.875rem;
-  color: #9ca3af;
-  margin: 0 0 1rem 0;
-  line-height: 1.5;
-}
-
-.card-meta {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.status-badge.completed {
+  font-size: 1rem;
+}
+
+.status-badge.failed {
+  font-size: 1rem;
+}
+
+.card-time {
   font-size: 0.75rem;
   color: #6b7280;
 }
 
-.meta-item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+.card-description {
+  font-size: 0.875rem;
+  color: #e5e7eb;
+  margin: 0;
+  line-height: 1.5;
 }
 
 .card-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 0.5rem;
 }
 
 .action-button {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #2a2a4a;
+  padding: 0.5rem 1rem;
   border-radius: 0.375rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  white-space: nowrap;
 }
 
 .action-button.primary {
   background-color: #00d4ff;
-  border-color: #00d4ff;
+  border: 1px solid #00d4ff;
   color: #0f0f1a;
 }
 
 .action-button.primary:hover {
   background-color: #00b8e6;
-  border-color: #00b8e6;
-}
-
-.action-button.secondary {
-  background-color: #2a2a4a;
-  color: #ffffff;
-}
-
-.action-button.secondary:hover {
-  background-color: #3a3a5a;
 }
 
 .action-button.danger {
   background-color: transparent;
   color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .action-button.danger:hover {
   background-color: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.5);
 }
 
 .empty-state {
@@ -355,8 +304,8 @@ const handleClearAll = () => {
 
 .empty-icon {
   font-size: 5rem;
-  margin-bottom: 1rem;
   display: block;
+  margin-bottom: 1rem;
 }
 
 .empty-state h3 {
@@ -408,15 +357,5 @@ const handleClearAll = () => {
 
 .clear-button:hover {
   background-color: rgba(239, 68, 68, 0.1);
-}
-
-@media (max-width: 640px) {
-  .card-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .action-button {
-    width: 100%;
-  }
 }
 </style>

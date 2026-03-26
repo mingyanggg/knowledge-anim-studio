@@ -49,6 +49,11 @@ onMounted(() => {
     selectedTemplateId.value = templateId;
     fillFromTemplate();
   }
+  // 从历史页跳转过来时预填充描述
+  const desc = route.query.desc as string;
+  if (desc) {
+    description.value = desc;
+  }
 });
 
 // 模板选择后自动填充描述和参数

@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useSubscriptionStore } from "../stores/subscriptionStore";
 
 const settingsStore = useSettingsStore();
 const subscriptionStore = useSubscriptionStore();
 
+// 导出设置
+const exportFormat = ref<"gif" | "mp4" | "webm">("mp4");
+const resolution = ref<"720p" | "1080p" | "4k">("1080p");
+const fps = ref<30 | 60>(30);
+const theme = ref<"dark" | "light">("dark");
+
+// API 设置
 const apiProvider = ref<"deepseek" | "openai">("deepseek");
 const apiKey = ref("");
 const activationCode = ref("");
@@ -14,8 +21,26 @@ const testResult = ref<{ success: boolean; message: string } | null>(null);
 
 const isPro = computed(() => subscriptionStore.isPro);
 
+// 导出设置变更时自动持久化
+watch([exportFormat, resolution, fps], () => {
+  settingsStore.updateSettings({
+    exportFormat: exportFormat.value,
+    resolution: resolution.value,
+    fps: fps.value,
+    theme: theme.value,
+  });
+});
+
+// 初始化时从 store 恢复设置
+const s = settingsStore.settings;
+if (s.exportFormat) exportFormat.value = s.exportFormat as "gif" | "mp4" | "webm";
+if (s.resolution) resolution.value = s.resolution as "720p" | "1080p" | "4k";
+if (s.fps) fps.value = s.fps as 30 | 60;
+if (s.theme) theme.value = s.theme;
+apiProvider.value = s.apiProvider;
+apiKey.value = s.apiKey;
+
 const handleTestConnection = async () => {
-  // Mock API test
   testResult.value = { success: true, message: "连接成功！" };
   showTestResult.value = true;
   setTimeout(() => {
@@ -27,6 +52,10 @@ const handleSaveSettings = () => {
   settingsStore.updateSettings({
     apiProvider: apiProvider.value,
     apiKey: apiKey.value,
+    exportFormat: exportFormat.value,
+    resolution: resolution.value,
+    fps: fps.value,
+    theme: theme.value,
   });
   testResult.value = { success: true, message: "设置已保存" };
   showTestResult.value = true;
@@ -57,13 +86,12 @@ const handleActivateCode = async () => {
 
 const features = [
   { name: "无限制生成", available: true, pro: false },
-  { name: "1080p 导出", available: true, pro: false },
   { name: "GIF 导出", available: true, pro: false },
+  { name: "1080p 导出", available: true, pro: false },
   { name: "4K 分辨率", available: true, pro: true },
-  { name: "MP4 导出", available: true, pro: true },
+  { name: "MP4/WEBM 导出", available: true, pro: true },
   { name: "批量渲染", available: true, pro: true },
   { name: "优先渲染", available: true, pro: true },
-  { name: "API 调用", available: true, pro: true },
 ];
 </script>
 
@@ -78,6 +106,80 @@ const features = [
     <div class="settings-content">
       <!-- Left Column -->
       <div class="settings-left">
+        <!-- 导出设置 -->
+        <div class="card">
+          <h3 class="card-title">导出设置</h3>
+
+          <div class="form-group">
+            <label class="form-label">导出格式</label>
+            <div class="option-grid">
+              <button
+                v-for="fmt in (['gif', 'mp4', 'webm'] as const)"
+                :key="fmt"
+                class="provider-option"
+                :class="{ active: exportFormat === fmt }"
+                @click="exportFormat = fmt"
+              >
+                {{ fmt.toUpperCase() }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">分辨率</label>
+            <div class="option-grid three">
+              <button
+                v-for="res in (['720p', '1080p', '4k'] as const)"
+                :key="res"
+                class="provider-option"
+                :class="{ active: resolution === res }"
+                @click="resolution = res"
+              >
+                {{ res === '720p' ? '720p HD' : res === '1080p' ? '1080p FHD' : '4K UHD' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">帧率</label>
+            <div class="option-grid two">
+              <button
+                v-for="f in ([30, 60] as const)"
+                :key="f"
+                class="provider-option"
+                :class="{ active: fps === f }"
+                @click="fps = f"
+              >
+                {{ f }} FPS
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 主题 -->
+        <div class="card">
+          <h3 class="card-title">外观</h3>
+          <div class="form-group">
+            <label class="form-label">主题</label>
+            <div class="option-grid two">
+              <button
+                class="provider-option"
+                :class="{ active: theme === 'dark' }"
+                @click="theme = 'dark'"
+              >
+                🌙 深色
+              </button>
+              <button
+                class="provider-option"
+                :class="{ active: theme === 'light' }"
+                disabled
+              >
+                ☀️ 浅色（即将推出）
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- API Settings Card -->
         <div class="card">
           <h3 class="card-title">API 配置</h3>
@@ -174,7 +276,7 @@ const features = [
               <span>已解锁所有 Pro 功能</span>
             </div>
             <p class="pro-expiry">
-              有效期至: {{ subscriptionStore.expiryDate || '永久' }}
+              有效期至: {{ subscriptionStore.state.expiryDate || '永久' }}
             </p>
           </div>
         </div>
@@ -240,15 +342,15 @@ const features = [
           <div class="about-info">
             <div class="about-item">
               <span class="about-label">版本</span>
-              <span class="about-value">1.0.0</span>
+              <span class="about-value">0.1.0</span>
             </div>
             <div class="about-item">
-              <span class="about-label">构建</span>
-              <span class="about-value">Tauri 2.x + Vue 3</span>
+              <span class="about-label">技术栈</span>
+              <span class="about-value">Tauri 2.x + Vue 3 + Manim</span>
             </div>
             <div class="about-item">
-              <span class="about-label">许可</span>
-              <span class="about-value">MIT</span>
+              <span class="about-label">描述</span>
+              <span class="about-value">AI 驱动的知识动画创作工具</span>
             </div>
           </div>
         </div>
@@ -353,6 +455,20 @@ const features = [
   gap: 0.75rem;
 }
 
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.option-grid.two {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.option-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .provider-option {
   display: flex;
   align-items: center;
@@ -368,7 +484,7 @@ const features = [
   transition: all 0.2s;
 }
 
-.provider-option:hover {
+.provider-option:hover:not(:disabled) {
   border-color: #00d4ff;
   color: #ffffff;
 }

@@ -57,11 +57,28 @@ class GeneratedScene(Scene):
 `;
 
       // Add to history
-      history.value.push({
+      const historyItem = {
         description: params.description,
         script: generatedScript.value,
         timestamp: Date.now(),
-      });
+      };
+      history.value.push(historyItem);
+
+      // 同步到 localStorage 历史记录
+      try {
+        const saved = JSON.parse(localStorage.getItem("anim-history") || "[]");
+        saved.push({
+          id: `h-${historyItem.timestamp}`,
+          description: params.description,
+          templateId: params.templateId || "",
+          templateTitle: "",
+          timestamp: historyItem.timestamp,
+          status: "completed" as const,
+        });
+        localStorage.setItem("anim-history", JSON.stringify(saved));
+      } catch {
+        // ignore
+      }
 
       // Keep only last 10 items
       if (history.value.length > 10) {
