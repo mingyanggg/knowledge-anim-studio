@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "knowledge-anim-studio",
+  "productName": "知识动画工坊",
   "version": "0.1.0",
   "identifier": "com.michael.knowledge-anim-studio",
   "build": {
@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "knowledge-anim-studio",
-        "width": 800,
-        "height": 600
+        "title": "知识动画工坊",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true
       }
     ],
     "security": {

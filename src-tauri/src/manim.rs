@@ -69,7 +69,7 @@ class GeneratedScene(Scene):
 }
 
 #[tauri::command]
-pub async fn render_animation(script: String) -> Result<String, String> {
+pub async fn render_animation(_script: String) -> Result<String, String> {
     // Mock implementation - replace with actual Manim render
     Ok("file://output/animation.mp4".to_string())
 }
