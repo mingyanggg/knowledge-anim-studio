@@ -2,9 +2,19 @@
 import { ref, computed, watch } from "vue";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useSubscriptionStore } from "../stores/subscriptionStore";
+import { stylePresets } from "../data/style-presets";
 
 const settingsStore = useSettingsStore();
 const subscriptionStore = useSubscriptionStore();
+
+// 风格预设
+const stylePresetId = ref("deep-space");
+const savedPreset = (settingsStore.settings as any).stylePreset;
+if (savedPreset) stylePresetId.value = savedPreset;
+
+watch(stylePresetId, () => {
+  settingsStore.updateSettings({ stylePreset: stylePresetId.value } as any);
+});
 
 // 导出设置
 const exportFormat = ref<"gif" | "mp4" | "webm">("mp4");
@@ -180,6 +190,28 @@ const features = [
           </div>
         </div>
 
+        <!-- 视觉风格预设 -->
+        <div class="card">
+          <h3 class="card-title">视觉风格</h3>
+          <p class="card-desc">选择动画的默认视觉风格，在生成页也可随时切换</p>
+          <div class="preset-grid">
+            <button
+              v-for="preset in stylePresets"
+              :key="preset.id"
+              class="preset-card"
+              :class="{ active: stylePresetId === preset.id }"
+              @click="stylePresetId = preset.id"
+            >
+              <div class="preset-preview" :style="{ background: preset.background }">
+                <div class="preview-bar" :style="{ background: preset.primaryColor }" />
+                <div class="preview-bar short" :style="{ background: preset.secondaryColor }" />
+              </div>
+              <span class="preset-name">{{ preset.name }}</span>
+              <span class="preset-desc">{{ preset.description }}</span>
+            </button>
+          </div>
+        </div>
+
         <!-- API Settings Card -->
         <div class="card">
           <h3 class="card-title">API 配置</h3>
@@ -342,11 +374,7 @@ const features = [
           <div class="about-info">
             <div class="about-item">
               <span class="about-label">版本</span>
-              <span class="about-value">0.1.0</span>
-            </div>
-            <div class="about-item">
-              <span class="about-label">技术栈</span>
-              <span class="about-value">Tauri 2.x + Vue 3 + Manim</span>
+              <span class="about-value">0.2.0</span>
             </div>
             <div class="about-item">
               <span class="about-label">描述</span>
@@ -796,8 +824,78 @@ const features = [
   font-weight: 500;
 }
 
+/* ---- 视觉风格预设 ---- */
+.card-desc {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: 0 0 1rem 0;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  background: #0f0f1a;
+  border: 1px solid #2a2a4a;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.preset-card:hover {
+  border-color: #00d4ff;
+}
+
+.preset-card.active {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.05);
+}
+
+.preset-preview {
+  height: 48px;
+  border-radius: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.preview-bar {
+  height: 6px;
+  border-radius: 3px;
+  width: 80%;
+}
+
+.preview-bar.short {
+  width: 50%;
+}
+
+.preset-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.preset-desc {
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.3;
+}
+
 @media (max-width: 1024px) {
   .settings-content {
+    grid-template-columns: 1fr;
+  }
+  .preset-grid {
     grid-template-columns: 1fr;
   }
 }

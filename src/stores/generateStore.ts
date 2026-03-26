@@ -30,30 +30,23 @@ export const useGenerateStore = defineStore("generate", () => {
       // Mock AI generation - replace with actual API call
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      generatedScript.value = `from manim import *
+      generatedScript.value = `# ===== 知识动画脚本 =====
+# 主题: ${params.description.substring(0, 50)}
 
-class GeneratedScene(Scene):
-    def construct(self):
-        # Generated from: ${params.description.substring(0, 50)}...
+# --- 场景 1: 标题 ---
+标题 = 文字("${params.description.substring(0, 30)}")
+显示(标题)
+等待(1秒)
 
-        # Title
-        title = Text("${params.description.substring(0, 30)}...")
-        title.scale(0.8)
-        self.play(Write(title))
-        self.wait()
+# --- 场景 2: 核心内容 ---
+公式 = 数学公式("E = mc^2", 颜色="${params.params.primaryColor}")
+放大(公式, 1.5倍)
+变换(标题, 公式)
+等待(2秒)
 
-        # Main content
-        content = MathTex(
-            "E = mc^2",
-            color="${params.params.primaryColor}"
-        )
-        content.scale(1.5)
-        self.play(Transform(title, content))
-        self.wait(2)
-
-        # Conclusion
-        self.play(FadeOut(content))
-        self.wait()
+# --- 场景 3: 收尾 ---
+淡出(公式)
+等待()
 `;
 
       // Add to history

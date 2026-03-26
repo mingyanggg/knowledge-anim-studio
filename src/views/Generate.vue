@@ -3,22 +3,35 @@ import { ref, computed, onMounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTemplateStore } from "../stores/templateStore";
 import { useGenerateStore } from "../stores/generateStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import { analyzeConcept, type AnalysisResult } from "../services/concept-analyzer";
+import { stylePresets, type StylePreset } from "../data/style-presets";
+import * as jobManager from "../services/job-manager";
 
 const router = useRouter();
 const route = useRoute();
 const templateStore = useTemplateStore();
 const generateStore = useGenerateStore();
+const settingsStore = useSettingsStore();
 
 const description = ref("");
 const selectedTemplateId = ref("");
 const showAdvanced = ref(false);
 const maxChars = 2000;
 
+// 概念分析
+const analysis = ref<AnalysisResult | null>(null);
+
+// 风格预设
+const selectedPresetId = ref("deep-space");
+const selectedPreset = computed<StylePreset>(() =>
+  stylePresets.find(p => p.id === selectedPresetId.value) ?? stylePresets[0]
+);
+
 // 高级参数
 const params = ref({
   primaryColor: "#00d4ff",
   secondaryColor: "#7c3aed",
-  style: "modern" as "modern" | "classic" | "minimal",
   duration: 30,
   fps: 60,
   resolution: "1080p" as "1080p" | "4k",
@@ -43,20 +56,50 @@ const charColor = computed(() => {
 // 生成按钮 loading 状态
 const isGenerating = ref(false);
 
+// 任务状态
+const activeJob = ref<jobManager.Job | null>(null);
+const jobProgress = computed(() => activeJob.value?.progress ?? 0);
+const jobMessage = computed(() => activeJob.value?.message ?? "");
+const jobStatus = computed(() => activeJob.value?.status ?? "idle");
+
+// 输入时实时分析
+watch(description, () => {
+  const input = description.value.trim();
+  if (!input) {
+    analysis.value = null;
+    return;
+  }
+  analysis.value = analyzeConcept(input);
+
+  // 模板匹配时自动选中
+  if (analysis.value.type === "template" && analysis.value.templateId) {
+    selectedTemplateId.value = analysis.value.templateId;
+  }
+});
+
+// 风格预设切换时同步颜色
+watch(selectedPresetId, () => {
+  params.value.primaryColor = selectedPreset.value.primaryColor;
+  params.value.secondaryColor = selectedPreset.value.secondaryColor;
+  // 保存到设置
+  settingsStore.updateSettings({ stylePreset: selectedPresetId.value } as any);
+});
+
 onMounted(() => {
   const templateId = route.query.template as string;
   if (templateId) {
     selectedTemplateId.value = templateId;
     fillFromTemplate();
   }
-  // 从历史页跳转过来时预填充描述
   const desc = route.query.desc as string;
   if (desc) {
     description.value = desc;
   }
+  // 从设置恢复风格
+  const saved = (settingsStore.settings as any).stylePreset;
+  if (saved) selectedPresetId.value = saved;
 });
 
-// 模板选择后自动填充描述和参数
 watch(selectedTemplateId, () => {
   fillFromTemplate();
 });
@@ -67,26 +110,40 @@ function fillFromTemplate() {
   if (!tpl) return;
   description.value = tpl.description;
   if (tpl.defaultParams) {
-    params.value.style = tpl.defaultParams.style;
     params.value.duration = tpl.defaultParams.duration;
     params.value.fps = tpl.defaultParams.fps;
   }
 }
 
-/** 点击生成：loading → 等待 mock 完成 → 跳转渲染页 */
+/** 点击生成：创建任务 → mock 进度 → 跳转渲染页 */
 async function handleGenerate() {
   if (!canGenerate.value || isGenerating.value) return;
   isGenerating.value = true;
 
-  await generateStore.generateScript({
-    description: description.value,
-    templateId: selectedTemplateId.value,
-    params: params.value,
-  });
+  // 创建任务
+  const job = jobManager.createJob("generate", "正在排队…");
+  activeJob.value = job;
 
-  isGenerating.value = false;
-  // 生成完成自动跳转渲染页
-  router.push("/render");
+  // 模拟进度
+  jobManager.startMockProgress(job.id, {
+    duration: 4000,
+    steps: ["分析概念…", "生成脚本…", "优化动画…", "脚本就绪！"],
+    onDone: async (finishedJob) => {
+      await generateStore.generateScript({
+        description: description.value,
+        templateId: selectedTemplateId.value,
+        params: { ...params.value, style: "modern" },
+      });
+      activeJob.value = finishedJob;
+      isGenerating.value = false;
+      // 跳转渲染页
+      router.push("/render");
+    },
+    onFail: (failedJob) => {
+      activeJob.value = failedJob;
+      isGenerating.value = false;
+    },
+  });
 }
 </script>
 
@@ -103,10 +160,7 @@ async function handleGenerate() {
         <!-- 模板选择 -->
         <div class="form-group">
           <label class="form-label">选择模板（可选）</label>
-          <select
-            v-model="selectedTemplateId"
-            class="form-select"
-          >
+          <select v-model="selectedTemplateId" class="form-select">
             <option value="">从头开始</option>
             <option
               v-for="tpl in templateStore.templates"
@@ -127,6 +181,11 @@ async function handleGenerate() {
             rows="8"
             placeholder="例如：演示勾股定理的几何证明，展示直角三角形三边的关系..."
           ></textarea>
+          <!-- 概念分析标签 -->
+          <div v-if="analysis" class="analysis-tag" :class="analysis.type">
+            <span class="tag-dot" />
+            <span>{{ analysis.label }}</span>
+          </div>
           <!-- 字数统计 -->
           <div class="char-count" :style="{ color: charColor }">
             {{ charCount }} / {{ maxChars }}
@@ -145,9 +204,31 @@ async function handleGenerate() {
           <span class="toggle-arrow" :class="{ open: showAdvanced }">▶</span>
         </button>
 
-        <!-- 高级参数面板（带折叠动画） -->
+        <!-- 高级参数面板 -->
         <Transition name="slide">
           <div v-if="showAdvanced" class="advanced-params">
+            <!-- 风格预设选择 -->
+            <div class="param-group">
+              <label class="param-label">视觉风格</label>
+              <div class="preset-grid">
+                <button
+                  v-for="preset in stylePresets"
+                  :key="preset.id"
+                  class="preset-card"
+                  :class="{ active: selectedPresetId === preset.id }"
+                  @click="selectedPresetId = preset.id"
+                >
+                  <div class="preset-colors">
+                    <span class="color-dot" :style="{ background: preset.primaryColor }" />
+                    <span class="color-dot" :style="{ background: preset.secondaryColor }" />
+                    <span class="color-dot" :style="{ background: preset.background }" />
+                  </div>
+                  <span class="preset-name">{{ preset.name }}</span>
+                  <span class="preset-desc">{{ preset.description }}</span>
+                </button>
+              </div>
+            </div>
+
             <div class="param-group">
               <label class="param-label">颜色主题</label>
               <div class="color-picker-group">
@@ -159,21 +240,6 @@ async function handleGenerate() {
                   <label>强调色</label>
                   <input type="color" v-model="params.secondaryColor" />
                 </div>
-              </div>
-            </div>
-
-            <div class="param-group">
-              <label class="param-label">视觉风格</label>
-              <div class="style-options">
-                <button
-                  v-for="s in ['modern', 'classic', 'minimal']"
-                  :key="s"
-                  class="style-option"
-                  :class="{ active: params.style === s }"
-                  @click="params.style = s as any"
-                >
-                  {{ s === "modern" ? "现代" : s === "classic" ? "经典" : "极简" }}
-                </button>
               </div>
             </div>
 
@@ -197,6 +263,17 @@ async function handleGenerate() {
           </div>
         </Transition>
 
+        <!-- 任务进度条 -->
+        <div v-if="isGenerating && activeJob" class="job-progress">
+          <div class="progress-header">
+            <span class="progress-message">{{ jobMessage }}</span>
+            <span class="progress-percent">{{ jobProgress }}%</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: jobProgress + '%' }" />
+          </div>
+        </div>
+
         <!-- 生成按钮 -->
         <button
           class="generate-button"
@@ -205,7 +282,7 @@ async function handleGenerate() {
         >
           <span v-if="!isGenerating">✨ 生成脚本</span>
           <span v-else class="btn-loading">
-            <span class="spinner" /> 生成中...
+            <span class="spinner" /> 处理中…
           </span>
         </button>
       </div>
@@ -331,6 +408,46 @@ async function handleGenerate() {
   min-height: 150px;
 }
 
+/* ---- 概念分析标签 ---- */
+.analysis-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.375rem 0.875rem;
+  border-radius: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.25s;
+}
+
+.analysis-tag .tag-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.analysis-tag.latex {
+  background: rgba(124, 58, 237, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+.analysis-tag.latex .tag-dot { background: #a78bfa; }
+
+.analysis-tag.template {
+  background: rgba(0, 212, 255, 0.1);
+  color: #00d4ff;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+}
+.analysis-tag.template .tag-dot { background: #00d4ff; }
+
+.analysis-tag.ai {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.analysis-tag.ai .tag-dot { background: #34d399; }
+
 /* 字数统计 */
 .char-count {
   font-size: 0.75rem;
@@ -383,12 +500,11 @@ async function handleGenerate() {
   transform: rotate(90deg);
 }
 
-/* Vue Transition 折叠动画 */
 .slide-enter-active,
 .slide-leave-active {
   transition: all 0.3s ease;
   overflow: hidden;
-  max-height: 600px;
+  max-height: 800px;
 }
 
 .slide-enter-from,
@@ -415,6 +531,60 @@ async function handleGenerate() {
   font-weight: 500;
   color: #fff;
   margin-bottom: 0.5rem;
+}
+
+/* ---- 风格预设网格 ---- */
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  background: #0f0f1a;
+  border: 1px solid #2a2a4a;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.preset-card:hover {
+  border-color: #00d4ff;
+}
+
+.preset-card.active {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.05);
+}
+
+.preset-colors {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.preset-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.preset-desc {
+  font-size: 0.6875rem;
+  color: #6b7280;
+  line-height: 1.3;
 }
 
 .color-picker-group {
@@ -444,34 +614,6 @@ async function handleGenerate() {
   cursor: pointer;
 }
 
-.style-options {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.style-option {
-  flex: 1;
-  padding: 0.625rem 1rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #9ca3af;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.style-option:hover {
-  border-color: #00d4ff;
-  color: #fff;
-}
-
-.style-option.active {
-  background: #00d4ff;
-  border-color: #00d4ff;
-  color: #0f0f1a;
-}
-
 .range-input {
   width: 100%;
   height: 6px;
@@ -497,6 +639,47 @@ async function handleGenerate() {
   border-radius: 50%;
   cursor: pointer;
   border: none;
+}
+
+/* ---- 任务进度 ---- */
+.job-progress {
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 0.5rem;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.progress-message {
+  font-size: 0.8125rem;
+  color: #9ca3af;
+}
+
+.progress-percent {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #00d4ff;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #2a2a4a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00d4ff, #7c3aed);
+  border-radius: 3px;
+  transition: width 0.4s ease;
 }
 
 /* ---- 生成按钮 ---- */
@@ -613,9 +796,7 @@ async function handleGenerate() {
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 .empty-state {
@@ -651,11 +832,8 @@ async function handleGenerate() {
 }
 
 @media (max-width: 1024px) {
-  .generate-content {
-    grid-template-columns: 1fr;
-  }
-  .preview-panel {
-    position: static;
-  }
+  .generate-content { grid-template-columns: 1fr; }
+  .preview-panel { position: static; }
+  .preset-grid { grid-template-columns: 1fr; }
 }
 </style>
