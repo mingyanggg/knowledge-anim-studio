@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useTemplateStore } from "../stores/templateStore";
 import { useGenerateStore } from "../stores/generateStore";
@@ -12,8 +12,9 @@ const generateStore = useGenerateStore();
 const description = ref("");
 const selectedTemplateId = ref("");
 const showAdvanced = ref(false);
+const maxChars = 2000;
 
-// Advanced parameters
+// 高级参数
 const params = ref({
   primaryColor: "#00d4ff",
   secondaryColor: "#7c3aed",
@@ -25,68 +26,94 @@ const params = ref({
 
 const selectedTemplate = computed(() => {
   if (!selectedTemplateId.value) return null;
-  return templateStore.templates.find(t => t.id === selectedTemplateId.value);
+  return templateStore.templates.find((t) => t.id === selectedTemplateId.value);
 });
 
-const canGenerate = computed(() => {
-  return description.value.trim().length > 0;
+const canGenerate = computed(() => description.value.trim().length > 0);
+
+// 字符数统计
+const charCount = computed(() => description.value.length);
+const charPercent = computed(() => Math.min((charCount.value / maxChars) * 100, 100));
+const charColor = computed(() => {
+  if (charCount.value > maxChars) return "#ef4444";
+  if (charCount.value > maxChars * 0.9) return "#f59e0b";
+  return "#6b7280";
 });
+
+// 生成按钮 loading 状态
+const isGenerating = ref(false);
 
 onMounted(() => {
   const templateId = route.query.template as string;
   if (templateId) {
     selectedTemplateId.value = templateId;
-    const template = templateStore.templates.find(t => t.id === templateId);
-    if (template) {
-      description.value = template.description;
-    }
+    fillFromTemplate();
   }
 });
 
-const handleGenerateScript = async () => {
-  if (!canGenerate.value) return;
+// 模板选择后自动填充描述和参数
+watch(selectedTemplateId, () => {
+  fillFromTemplate();
+});
+
+/** 根据选中模板自动填充描述和高级参数 */
+function fillFromTemplate() {
+  const tpl = selectedTemplate.value;
+  if (!tpl) return;
+  description.value = tpl.description;
+  if (tpl.defaultParams) {
+    params.value.style = tpl.defaultParams.style;
+    params.value.duration = tpl.defaultParams.duration;
+    params.value.fps = tpl.defaultParams.fps;
+  }
+}
+
+/** 点击生成：loading → 等待 mock 完成 → 跳转渲染页 */
+async function handleGenerate() {
+  if (!canGenerate.value || isGenerating.value) return;
+  isGenerating.value = true;
 
   await generateStore.generateScript({
     description: description.value,
     templateId: selectedTemplateId.value,
     params: params.value,
   });
-};
 
-const handleStartRender = () => {
+  isGenerating.value = false;
+  // 生成完成自动跳转渲染页
   router.push("/render");
-};
-
-const handleTemplateChange = () => {
-  if (selectedTemplate.value) {
-    description.value = selectedTemplate.value.description;
-  }
-};
+}
 </script>
 
 <template>
   <div class="generate-page">
-    <!-- Header -->
     <header class="page-header">
       <h2 class="page-title">AI 生成</h2>
       <p class="page-subtitle">描述你的知识点，AI 将自动生成动画脚本</p>
     </header>
 
     <div class="generate-content">
-      <!-- Left Panel -->
+      <!-- ===== 左侧：输入面板 ===== -->
       <div class="input-panel">
-        <!-- Template Selection -->
+        <!-- 模板选择 -->
         <div class="form-group">
           <label class="form-label">选择模板（可选）</label>
-          <select v-model="selectedTemplateId" class="form-select" @change="handleTemplateChange">
+          <select
+            v-model="selectedTemplateId"
+            class="form-select"
+          >
             <option value="">从头开始</option>
-            <option v-for="template in templateStore.templates" :key="template.id" :value="template.id">
-              {{ template.emoji }} {{ template.title }}
+            <option
+              v-for="tpl in templateStore.templates"
+              :key="tpl.id"
+              :value="tpl.id"
+            >
+              {{ tpl.emoji }} {{ tpl.title }}
             </option>
           </select>
         </div>
 
-        <!-- Description Input -->
+        <!-- 描述输入 -->
         <div class="form-group">
           <label class="form-label">知识点描述</label>
           <textarea
@@ -95,105 +122,105 @@ const handleTemplateChange = () => {
             rows="8"
             placeholder="例如：演示勾股定理的几何证明，展示直角三角形三边的关系..."
           ></textarea>
-          <p class="form-hint">
-            {{ description.length }} / 2000 字符
-          </p>
+          <!-- 字数统计 -->
+          <div class="char-count" :style="{ color: charColor }">
+            {{ charCount }} / {{ maxChars }}
+          </div>
+          <div class="char-bar">
+            <div
+              class="char-bar-fill"
+              :style="{ width: charPercent + '%', background: charColor }"
+            />
+          </div>
         </div>
 
-        <!-- Advanced Parameters Toggle -->
+        <!-- 高级参数切换 -->
         <button class="toggle-button" @click="showAdvanced = !showAdvanced">
           <span>⚙️ 高级参数</span>
-          <span class="toggle-icon">{{ showAdvanced ? '▼' : '▶' }}</span>
+          <span class="toggle-arrow" :class="{ open: showAdvanced }">▶</span>
         </button>
 
-        <!-- Advanced Parameters -->
-        <div v-if="showAdvanced" class="advanced-params">
-          <div class="param-group">
-            <label class="param-label">颜色主题</label>
-            <div class="color-picker-group">
-              <div class="color-input">
-                <label>主色</label>
-                <input type="color" v-model="params.primaryColor" />
-              </div>
-              <div class="color-input">
-                <label>强调色</label>
-                <input type="color" v-model="params.secondaryColor" />
+        <!-- 高级参数面板（带折叠动画） -->
+        <Transition name="slide">
+          <div v-if="showAdvanced" class="advanced-params">
+            <div class="param-group">
+              <label class="param-label">颜色主题</label>
+              <div class="color-picker-group">
+                <div class="color-input">
+                  <label>主色</label>
+                  <input type="color" v-model="params.primaryColor" />
+                </div>
+                <div class="color-input">
+                  <label>强调色</label>
+                  <input type="color" v-model="params.secondaryColor" />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="param-group">
-            <label class="param-label">视觉风格</label>
-            <div class="style-options">
-              <button
-                v-for="style in ['modern', 'classic', 'minimal']"
-                :key="style"
-                class="style-option"
-                :class="{ active: params.style === style }"
-                @click="params.style = style as any"
-              >
-                {{ style === 'modern' ? '现代' : style === 'classic' ? '经典' : '极简' }}
-              </button>
+            <div class="param-group">
+              <label class="param-label">视觉风格</label>
+              <div class="style-options">
+                <button
+                  v-for="s in ['modern', 'classic', 'minimal']"
+                  :key="s"
+                  class="style-option"
+                  :class="{ active: params.style === s }"
+                  @click="params.style = s as any"
+                >
+                  {{ s === "modern" ? "现代" : s === "classic" ? "经典" : "极简" }}
+                </button>
+              </div>
+            </div>
+
+            <div class="param-group">
+              <label class="param-label">时长（秒）：{{ params.duration }}</label>
+              <input v-model.number="params.duration" type="range" min="10" max="120" step="5" class="range-input" />
+            </div>
+
+            <div class="param-group">
+              <label class="param-label">帧率：{{ params.fps }} FPS</label>
+              <input v-model.number="params.fps" type="range" min="24" max="60" step="6" class="range-input" />
+            </div>
+
+            <div class="param-group">
+              <label class="param-label">分辨率</label>
+              <select v-model="params.resolution" class="form-select">
+                <option value="1080p">1080p (Full HD)</option>
+                <option value="4k">4K (Ultra HD) - Pro</option>
+              </select>
             </div>
           </div>
+        </Transition>
 
-          <div class="param-group">
-            <label class="param-label">时长（秒）：{{ params.duration }}</label>
-            <input
-              v-model.number="params.duration"
-              type="range"
-              min="10"
-              max="120"
-              step="5"
-              class="range-input"
-            />
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">帧率：{{ params.fps }} FPS</label>
-            <input
-              v-model.number="params.fps"
-              type="range"
-              min="24"
-              max="60"
-              step="6"
-              class="range-input"
-            />
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">分辨率</label>
-            <select v-model="params.resolution" class="form-select">
-              <option value="1080p">1080p (Full HD)</option>
-              <option value="4k">4K (Ultra HD) - Pro</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Generate Button -->
+        <!-- 生成按钮 -->
         <button
           class="generate-button"
-          :class="{ loading: generateStore.isLoading }"
-          :disabled="!canGenerate || generateStore.isLoading"
-          @click="handleGenerateScript"
+          :disabled="!canGenerate || isGenerating"
+          @click="handleGenerate"
         >
-          <span v-if="!generateStore.isLoading">✨ 生成脚本</span>
-          <span v-else>生成中...</span>
+          <span v-if="!isGenerating">✨ 生成脚本</span>
+          <span v-else class="btn-loading">
+            <span class="spinner" /> 生成中...
+          </span>
         </button>
       </div>
 
-      <!-- Right Panel - Code Preview -->
+      <!-- ===== 右侧：脚本预览 ===== -->
       <div class="preview-panel">
         <div class="preview-header">
           <h3 class="preview-title">生成的脚本</h3>
-          <div v-if="generateStore.generatedScript" class="preview-actions">
-            <button class="action-button" @click="generateStore.copyScript">📋 复制</button>
-          </div>
+          <button
+            v-if="generateStore.generatedScript"
+            class="action-button"
+            @click="generateStore.copyScript"
+          >
+            📋 复制
+          </button>
         </div>
 
         <div class="code-preview">
           <div v-if="generateStore.isLoading" class="loading-state">
-            <div class="spinner"></div>
+            <div class="spinner" />
             <p>AI 正在生成脚本...</p>
           </div>
 
@@ -204,23 +231,13 @@ const handleTemplateChange = () => {
           <div v-else class="empty-state">
             <span class="empty-icon">📝</span>
             <p>输入描述并点击"生成脚本"</p>
-            <p class="empty-hint">AI 将为你生成完整的 Manim Python 代码</p>
+            <p class="empty-hint">输入知识点名称，智能生成精美动画脚本</p>
           </div>
         </div>
 
-        <!-- Error Display -->
         <div v-if="generateStore.error" class="error-message">
           ❌ {{ generateStore.error }}
         </div>
-
-        <!-- Render Button -->
-        <button
-          v-if="generateStore.generatedScript"
-          class="render-button"
-          @click="handleStartRender"
-        >
-          🎬 开始渲染
-        </button>
       </div>
     </div>
   </div>
@@ -239,8 +256,8 @@ const handleTemplateChange = () => {
 .page-title {
   font-size: 2rem;
   font-weight: 700;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  margin: 0 0 0.5rem;
+  background: linear-gradient(135deg, #00d4ff, #7c3aed);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -259,8 +276,9 @@ const handleTemplateChange = () => {
   align-items: start;
 }
 
+/* ---- 输入面板 ---- */
 .input-panel {
-  background-color: #1a1a2e;
+  background: #1a1a2e;
   border: 1px solid #2a2a4a;
   border-radius: 0.75rem;
   padding: 1.5rem;
@@ -274,7 +292,7 @@ const handleTemplateChange = () => {
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #ffffff;
+  color: #fff;
   margin-bottom: 0.5rem;
 }
 
@@ -282,13 +300,13 @@ const handleTemplateChange = () => {
 .form-textarea {
   width: 100%;
   padding: 0.75rem 1rem;
-  background-color: #0f0f1a;
+  background: #0f0f1a;
   border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
-  color: #ffffff;
+  color: #fff;
   font-size: 0.875rem;
   font-family: inherit;
-  transition: all 0.2s;
+  transition: border-color 0.2s;
 }
 
 .form-select:focus,
@@ -308,36 +326,72 @@ const handleTemplateChange = () => {
   min-height: 150px;
 }
 
-.form-hint {
+/* 字数统计 */
+.char-count {
   font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 0.5rem;
   text-align: right;
+  margin-top: 0.5rem;
+  transition: color 0.2s;
 }
 
+.char-bar {
+  height: 3px;
+  background: #2a2a4a;
+  border-radius: 2px;
+  margin-top: 0.25rem;
+  overflow: hidden;
+}
+
+.char-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.2s, background 0.2s;
+}
+
+/* ---- 高级参数折叠 ---- */
 .toggle-button {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background-color: #2a2a4a;
+  background: #2a2a4a;
   border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
-  color: #ffffff;
+  color: #fff;
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 
 .toggle-button:hover {
-  background-color: #3a3a5a;
+  background: #3a3a5a;
 }
 
-.toggle-icon {
-  font-size: 0.75rem;
-  transition: transform 0.2s;
+.toggle-arrow {
+  transition: transform 0.25s ease;
+  font-size: 0.7rem;
+}
+
+.toggle-arrow.open {
+  transform: rotate(90deg);
+}
+
+/* Vue Transition 折叠动画 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+  max-height: 600px;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .advanced-params {
@@ -354,7 +408,7 @@ const handleTemplateChange = () => {
   display: block;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #ffffff;
+  color: #fff;
   margin-bottom: 0.5rem;
 }
 
@@ -379,7 +433,7 @@ const handleTemplateChange = () => {
   width: 100%;
   height: 40px;
   padding: 0.25rem;
-  background-color: #0f0f1a;
+  background: #0f0f1a;
   border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
   cursor: pointer;
@@ -393,7 +447,7 @@ const handleTemplateChange = () => {
 .style-option {
   flex: 1;
   padding: 0.625rem 1rem;
-  background-color: #0f0f1a;
+  background: #0f0f1a;
   border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
   color: #9ca3af;
@@ -404,11 +458,11 @@ const handleTemplateChange = () => {
 
 .style-option:hover {
   border-color: #00d4ff;
-  color: #ffffff;
+  color: #fff;
 }
 
 .style-option.active {
-  background-color: #00d4ff;
+  background: #00d4ff;
   border-color: #00d4ff;
   color: #0f0f1a;
 }
@@ -416,7 +470,7 @@ const handleTemplateChange = () => {
 .range-input {
   width: 100%;
   height: 6px;
-  background-color: #2a2a4a;
+  background: #2a2a4a;
   border-radius: 3px;
   outline: none;
   -webkit-appearance: none;
@@ -424,10 +478,9 @@ const handleTemplateChange = () => {
 
 .range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  appearance: none;
   width: 16px;
   height: 16px;
-  background-color: #00d4ff;
+  background: #00d4ff;
   border-radius: 50%;
   cursor: pointer;
 }
@@ -435,23 +488,25 @@ const handleTemplateChange = () => {
 .range-input::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background-color: #00d4ff;
+  background: #00d4ff;
   border-radius: 50%;
   cursor: pointer;
   border: none;
 }
 
+/* ---- 生成按钮 ---- */
 .generate-button {
   width: 100%;
+  margin-top: 1.5rem;
   padding: 1rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #00d4ff, #7c3aed);
   border: none;
   border-radius: 0.5rem;
-  color: #ffffff;
+  color: #fff;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .generate-button:hover:not(:disabled) {
@@ -464,10 +519,13 @@ const handleTemplateChange = () => {
   cursor: not-allowed;
 }
 
-.generate-button.loading {
-  opacity: 0.7;
+.btn-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
+/* ---- 预览面板 ---- */
 .preview-panel {
   position: sticky;
   top: 2rem;
@@ -483,32 +541,27 @@ const handleTemplateChange = () => {
 .preview-title {
   font-size: 1.25rem;
   font-weight: 600;
+  color: #fff;
   margin: 0;
-  color: #ffffff;
-}
-
-.preview-actions {
-  display: flex;
-  gap: 0.5rem;
 }
 
 .action-button {
   padding: 0.5rem 1rem;
-  background-color: #2a2a4a;
+  background: #2a2a4a;
   border: 1px solid #2a2a4a;
   border-radius: 0.375rem;
-  color: #ffffff;
+  color: #fff;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 
 .action-button:hover {
-  background-color: #3a3a5a;
+  background: #3a3a5a;
 }
 
 .code-preview {
-  background-color: #1a1a2e;
+  background: #1a1a2e;
   border: 1px solid #2a2a4a;
   border-radius: 0.75rem;
   height: 500px;
@@ -525,7 +578,7 @@ const handleTemplateChange = () => {
 
 .code-content pre {
   margin: 0;
-  font-family: 'Monaco', 'Menlo', monospace;
+  font-family: "Monaco", "Menlo", monospace;
   font-size: 0.875rem;
   line-height: 1.6;
   color: #e5e7eb;
@@ -546,12 +599,12 @@ const handleTemplateChange = () => {
 }
 
 .spinner {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   border: 3px solid #2a2a4a;
   border-top-color: #00d4ff;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
@@ -585,37 +638,17 @@ const handleTemplateChange = () => {
 .error-message {
   margin-top: 1rem;
   padding: 0.75rem 1rem;
-  background-color: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 0.5rem;
   color: #ef4444;
   font-size: 0.875rem;
 }
 
-.render-button {
-  width: 100%;
-  margin-top: 1rem;
-  padding: 1rem;
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  border: none;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.render-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.3);
-}
-
 @media (max-width: 1024px) {
   .generate-content {
     grid-template-columns: 1fr;
   }
-
   .preview-panel {
     position: static;
   }

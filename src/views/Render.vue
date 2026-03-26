@@ -34,7 +34,7 @@ const startRendering = async () => {
   addLog("初始化渲染环境...");
   await sleep(500);
 
-  addLog("加载 Manim 模块...");
+  addLog("正在加载渲染引擎...");
   await sleep(800);
 
   addLog("解析脚本...");
