@@ -15,25 +15,51 @@ const phase = ref<RenderPhase>("idle");
 const progress = ref(0);
 const estimatedTime = ref(0);
 
+// Tab 切换：脚本预览 / 动画预览
+type TabType = "script" | "preview";
+const activeTab = ref<TabType>("script");
+
+// 导出视频反馈
+const exportVideoMsg = ref("");
+let exportTimer: ReturnType<typeof setTimeout> | null = null;
+
 /** 添加日志 */
 const addLog = (message: string) => {
   const timestamp = new Date().toLocaleTimeString();
   logs.value.push(`[${timestamp}] ${message}`);
 };
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** 导出视频（即将上线） */
+const handleExportVideo = () => {
+  exportVideoMsg.value = "🎬 视频导出功能即将上线，敬请期待！";
+  if (exportTimer) clearTimeout(exportTimer);
+  exportTimer = setTimeout(() => {
+    exportVideoMsg.value = "";
+  }, 4000);
+};
+
+/** 导出脚本 */
+const handleExportScript = () => {
+  if (!generateStore.generatedScript) return;
+  const blob = new Blob([generateStore.generatedScript], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `animation_${Date.now()}.py`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
 
 /** 开始渲染流程 */
 const startRender = async () => {
-  // 如果没有生成脚本，提示去生成页
   if (!generateStore.generatedScript) {
     phase.value = "idle";
     return;
   }
 
   logs.value = [];
-
-  // 阶段1：模拟渲染（真实 Manim 未接入）
   phase.value = "rendering";
   addLog("初始化渲染环境...");
   await sleep(500);
@@ -56,7 +82,6 @@ const startRender = async () => {
 };
 
 onMounted(() => {
-  // 如果 store 里有生成脚本，自动开始渲染
   if (generateStore.generatedScript) {
     startRender();
   } else {
@@ -76,7 +101,7 @@ const handleBackToGenerate = () => {
       <p class="page-subtitle">实时渲染进度和预览</p>
     </header>
 
-    <!-- 空状态：没有生成脚本 -->
+    <!-- 空状态 -->
     <div v-if="phase === 'idle'" class="empty-state">
       <span class="empty-icon">📝</span>
       <h3>还没有可渲染的动画</h3>
@@ -92,7 +117,6 @@ const handleBackToGenerate = () => {
         <div class="card">
           <h3 class="card-title">渲染进度</h3>
 
-          <!-- 演示模式提示 -->
           <div class="demo-banner">
             ⚠️ 当前为演示模式，渲染进度为模拟数据
           </div>
@@ -118,8 +142,8 @@ const handleBackToGenerate = () => {
               </span>
             </div>
             <div class="status-item">
-              <span class="status-label">模式</span>
-              <span class="status-value">演示</span>
+              <span class="status-label">场景数</span>
+              <span class="status-value">{{ generateStore.generatedScenes.length || '-' }}</span>
             </div>
           </div>
         </div>
@@ -139,16 +163,42 @@ const handleBackToGenerate = () => {
       <!-- 右侧：预览 & 操作 -->
       <div class="preview-panel">
         <div class="card">
-          <h3 class="card-title">预览</h3>
-          <div class="preview-container">
+          <!-- Tab 切换 -->
+          <div class="tab-bar">
+            <button
+              class="tab-button"
+              :class="{ active: activeTab === 'script' }"
+              @click="activeTab = 'script'"
+            >
+              📜 查看脚本
+            </button>
+            <button
+              class="tab-button"
+              :class="{ active: activeTab === 'preview' }"
+              @click="activeTab = 'preview'"
+            >
+              🎬 动画预览
+            </button>
+          </div>
+
+          <!-- 脚本预览 -->
+          <div v-if="activeTab === 'script'" class="script-preview">
+            <div v-if="generateStore.generatedScript" class="code-content">
+              <pre><code>{{ generateStore.generatedScript }}</code></pre>
+            </div>
+            <div v-else class="preview-empty">暂无脚本内容</div>
+          </div>
+
+          <!-- 动画预览（占位） -->
+          <div v-else class="animation-preview">
             <div v-if="phase === 'rendering'" class="preview-loading">
               <div class="spinner"></div>
               <p>渲染中...</p>
             </div>
             <div v-else-if="phase === 'done'" class="preview-placeholder">
               <span class="placeholder-icon">🎬</span>
-              <p>预览功能即将上线</p>
-              <p class="placeholder-hint">真实 Manim 渲染接入后可在此预览动画效果</p>
+              <p>动画预览即将上线</p>
+              <p class="placeholder-hint">真实渲染引擎接入后可在此预览动画效果</p>
             </div>
           </div>
         </div>
@@ -158,7 +208,23 @@ const handleBackToGenerate = () => {
           <button class="secondary-button" @click="handleBackToGenerate">
             ← 返回修改
           </button>
+          <button
+            class="secondary-button"
+            @click="handleExportScript"
+          >
+            💾 导出脚本
+          </button>
+          <button
+            class="primary-button"
+            @click="handleExportVideo"
+            :disabled="phase !== 'done'"
+          >
+            🎥 导出视频
+          </button>
         </div>
+
+        <!-- 导出提示 -->
+        <div v-if="exportVideoMsg" class="export-toast">{{ exportVideoMsg }}</div>
       </div>
     </div>
   </div>
@@ -358,13 +424,77 @@ const handleBackToGenerate = () => {
   padding: 2rem 0;
 }
 
-/* 预览 */
-.preview-container {
-  aspect-ratio: 16 / 9;
+/* Tab 切换 */
+.tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tab-button {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  background: #0f0f1a;
+  border: 1px solid #2a2a4a;
+  border-radius: 0.5rem;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-button:hover {
+  border-color: #00d4ff;
+  color: #fff;
+}
+
+.tab-button.active {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: #00d4ff;
+  color: #00d4ff;
+}
+
+/* 脚本预览 */
+.script-preview,
+.animation-preview {
   background-color: #0f0f1a;
   border: 1px solid #2a2a4a;
   border-radius: 0.5rem;
+  min-height: 350px;
   overflow: hidden;
+}
+
+.code-content {
+  padding: 1rem;
+  max-height: 450px;
+  overflow: auto;
+}
+
+.code-content pre {
+  margin: 0;
+  font-family: "Monaco", "Menlo", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: #e5e7eb;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.code-content code {
+  color: inherit;
+}
+
+.preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 350px;
+  color: #6b7280;
+}
+
+/* 动画预览占位 */
+.animation-preview {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -378,6 +508,7 @@ const handleBackToGenerate = () => {
   gap: 1rem;
   color: #9ca3af;
   text-align: center;
+  padding: 2rem;
 }
 
 .spinner {
@@ -406,11 +537,13 @@ const handleBackToGenerate = () => {
 /* 操作按钮 */
 .action-buttons {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .secondary-button {
   flex: 1;
+  min-width: 100px;
   padding: 0.75rem 1rem;
   background-color: #2a2a4a;
   border: 1px solid #2a2a4a;
@@ -424,6 +557,40 @@ const handleBackToGenerate = () => {
 
 .secondary-button:hover {
   background-color: #3a3a5a;
+}
+
+.primary-button {
+  flex: 1;
+  min-width: 100px;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  border: none;
+  border-radius: 0.5rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.primary-button:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+}
+
+.primary-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.export-toast {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 0.5rem;
+  color: #f59e0b;
+  font-size: 0.875rem;
+  text-align: center;
 }
 
 @media (max-width: 1024px) {

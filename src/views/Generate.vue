@@ -6,7 +6,12 @@ import { useGenerateStore } from "../stores/generateStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { analyzeConcept, type AnalysisResult } from "../services/concept-analyzer";
 import { stylePresets, type StylePreset } from "../data/style-presets";
+import { exportScriptFile } from "../services/ai-generator";
 import * as jobManager from "../services/job-manager";
+
+// 导出反馈
+const exportMsg = ref("");
+let exportMsgTimer: ReturnType<typeof setTimeout> | null = null;
 
 const router = useRouter();
 const route = useRoute();
@@ -144,6 +149,28 @@ async function handleGenerate() {
       isGenerating.value = false;
     },
   });
+}
+
+/** 导出脚本为 .py 文件 */
+async function handleExportScript() {
+  if (!generateStore.generatedScript) return;
+  try {
+    const filename = `animation_${Date.now()}.py`;
+    await exportScriptFile(generateStore.generatedScript, filename);
+    exportMsg.value = "脚本已保存";
+  } catch {
+    // 浏览器端降级：用 Blob 下载
+    const blob = new Blob([generateStore.generatedScript], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `animation_${Date.now()}.py`;
+    a.click();
+    URL.revokeObjectURL(url);
+    exportMsg.value = "脚本已下载";
+  }
+  if (exportMsgTimer) clearTimeout(exportMsgTimer);
+  exportMsgTimer = setTimeout(() => { exportMsg.value = ""; }, 3000);
 }
 </script>
 
@@ -298,7 +325,15 @@ async function handleGenerate() {
           >
             📋 复制
           </button>
+          <button
+            v-if="generateStore.generatedScript"
+            class="action-button"
+            @click="handleExportScript"
+          >
+            💾 导出脚本
+          </button>
         </div>
+        <div v-if="exportMsg" class="export-toast">{{ exportMsg }}</div>
 
         <div class="code-preview">
           <div v-if="generateStore.isLoading" class="loading-state">
@@ -829,6 +864,17 @@ async function handleGenerate() {
   border-radius: 0.5rem;
   color: #ef4444;
   font-size: 0.875rem;
+}
+
+.export-toast {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  border-radius: 0.5rem;
+  color: #34d399;
+  font-size: 0.8125rem;
+  text-align: center;
 }
 
 @media (max-width: 1024px) {

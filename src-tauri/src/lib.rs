@@ -1,5 +1,6 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
+mod ai;
 mod manim;
 mod subscription;
 
@@ -8,6 +9,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // AI 生成命令
+            ai::generate_animation_script,
+            ai::export_script_file,
             // Manim commands
             manim::check_manim_installed,
             manim::generate_script,
