@@ -2,8 +2,11 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import {
   generateAnimationScript,
+  getUsage,
   type GenerateResult,
   type ScenePlan,
+  type UsageResult,
+  QuotaExceededError,
 } from "../services/ai-generator";
 
 interface GenerateParams {
@@ -13,6 +16,7 @@ interface GenerateParams {
     primaryColor: string;
     secondaryColor: string;
     style: "modern" | "classic" | "minimal";
+    narrationStyle?: string;
     duration: number;
     fps: number;
     resolution: "1080p" | "4k";
@@ -24,80 +28,97 @@ export const useGenerateStore = defineStore("generate", () => {
   const generatedScenes = ref<ScenePlan[]>([]);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
+  const usage = ref<UsageResult | null>(null);
   const history = ref<Array<{ description: string; script: string; timestamp: number }>>([]);
 
   const hasGeneratedScript = computed(() => generatedScript.value.length > 0);
 
   /**
    * 生成脚本：调用后端 AI 服务
-   * 失败时降级为前端 mock
+   * 使用新的 Cloudflare Workers API
    */
   const generateScript = async (params: GenerateParams) => {
     isLoading.value = true;
     error.value = null;
 
     try {
-      // 尝试调用后端 Tauri Command
+      // 调用新的后端 API
       const result: GenerateResult = await generateAnimationScript(
         params.description,
-        params.params.style,
+        params.params.narrationStyle || "classroom",
+        {
+          primary: params.params.primaryColor,
+          secondary: params.params.secondaryColor,
+        },
+        params.params.duration,
+        params.params.fps,
       );
 
       generatedScript.value = result.script;
       generatedScenes.value = result.scenes;
 
+      // 更新用量信息
+      usage.value = {
+        plan: result.usage.plan,
+        planName: getPlanName(result.usage.plan),
+        usedThisMonth: result.usage.used,
+        maxPerMonth: result.usage.max,
+        remaining: result.usage.max === -1 ? -1 : result.usage.max - result.usage.used,
+        resetDate: getMonthEnd(),
+      };
+
       // 记录到历史
       addToHistory(params.description, result.script);
     } catch (e) {
-      console.warn("[generateStore] 后端调用失败，使用前端 mock:", e);
-
-      // 降级：前端 mock 生成
-      try {
-        await mockGenerate(params);
-      } catch (mockErr) {
-        error.value = mockErr instanceof Error ? mockErr.message : "生成失败";
-        console.error("Mock generation error:", mockErr);
+      if (e instanceof QuotaExceededError) {
+        // 配额超限错误
+        error.value = `本月配额已用完（${e.used}/${e.max}），请升级订阅以继续使用`;
+        usage.value = {
+          plan: e.plan,
+          planName: getPlanName(e.plan),
+          usedThisMonth: e.used,
+          maxPerMonth: e.max,
+          remaining: 0,
+          resetDate: getMonthEnd(),
+        };
+      } else {
+        // 其他错误
+        const message = e instanceof Error ? e.message : "生成失败";
+        error.value = message;
+        console.error("Generation error:", e);
       }
     } finally {
       isLoading.value = false;
     }
   };
 
-  /** 前端 mock 生成（降级方案） */
-  const mockGenerate = async (params: GenerateParams) => {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    generatedScript.value = `# ===== 知识动画脚本 =====
-# 主题: ${params.description.substring(0, 50)}
-
-from manim import *
-
-class KnowledgeAnimation(Scene):
-    def construct(self):
-        # --- 场景 1: 标题 ---
-        title = Text("${params.description.substring(0, 30)}")
-        self.play(Write(title))
-        self.wait(1)
-
-        # --- 场景 2: 核心内容 ---
-        formula = MathTex("E = mc^2", color="${params.params.primaryColor}")
-        formula.scale(1.5)
-        self.play(Transform(title, formula))
-        self.wait(2)
-
-        # --- 场景 3: 收尾 ---
-        self.play(FadeOut(formula))
-        self.wait()
-`;
-
-    generatedScenes.value = [
-      { index: 1, title: "标题展示", description: "展示知识点标题", duration: 3 },
-      { index: 2, title: "核心概念", description: "展示核心公式", duration: 5 },
-      { index: 3, title: "总结", description: "结束动画", duration: 2 },
-    ];
-
-    addToHistory(params.description, generatedScript.value);
+  /**
+   * 查询当前使用量
+   */
+  const fetchUsage = async () => {
+    try {
+      usage.value = await getUsage();
+    } catch (e) {
+      console.error("Failed to fetch usage:", e);
+    }
   };
+
+  /** 获取计划名称 */
+  function getPlanName(plan: string): string {
+    const names: Record<string, string> = {
+      free: "免费版",
+      basic: "基础版",
+      pro: "专业版",
+      ultimate: "旗舰版",
+    };
+    return names[plan] || "免费版";
+  }
+
+  /** 获取月底日期 */
+  function getMonthEnd(): string {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+  }
 
   /** 记录到历史 */
   const addToHistory = (description: string, script: string) => {
@@ -152,9 +173,11 @@ class KnowledgeAnimation(Scene):
     generatedScenes,
     isLoading,
     error,
+    usage,
     history,
     hasGeneratedScript,
     generateScript,
+    fetchUsage,
     copyScript,
     clearScript,
   };

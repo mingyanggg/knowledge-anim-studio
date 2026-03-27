@@ -2,6 +2,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useGenerateStore } from "../stores/generateStore";
+import VideoPlayer from "../components/VideoPlayer.vue";
 
 const router = useRouter();
 const generateStore = useGenerateStore();
@@ -15,9 +16,12 @@ const phase = ref<RenderPhase>("idle");
 const progress = ref(0);
 const estimatedTime = ref(0);
 
-// Tab 切换：脚本预览 / 动画预览
-type TabType = "script" | "preview";
+// Tab 切换：脚本预览 / 动画预览 / 视频播放
+type TabType = "script" | "preview" | "video";
 const activeTab = ref<TabType>("script");
+
+// 视频路径（渲染完成后设置）
+const videoPath = ref<string>("");
 
 // 导出视频反馈
 const exportVideoMsg = ref("");
@@ -31,13 +35,23 @@ const addLog = (message: string) => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 导出视频（即将上线） */
+/** 导出视频 */
 const handleExportVideo = () => {
-  exportVideoMsg.value = "🎬 视频导出功能即将上线，敬请期待！";
+  if (!videoPath.value) {
+    exportVideoMsg.value = "暂无视频可导出";
+    if (exportTimer) clearTimeout(exportTimer);
+    exportTimer = setTimeout(() => {
+      exportVideoMsg.value = "";
+    }, 3000);
+    return;
+  }
+
+  // TODO: Implement actual video export
+  exportVideoMsg.value = "视频导出功能开发中...";
   if (exportTimer) clearTimeout(exportTimer);
   exportTimer = setTimeout(() => {
     exportVideoMsg.value = "";
-  }, 4000);
+  }, 3000);
 };
 
 /** 导出脚本 */
@@ -79,6 +93,14 @@ const startRender = async () => {
 
   addLog("渲染完成！");
   phase.value = "done";
+
+  // 模拟设置视频路径（实际应从渲染结果获取）
+  // videoPath.value = "/path/to/rendered/video.mp4";
+
+  // 自动切换到视频标签
+  if (videoPath.value) {
+    activeTab.value = "video";
+  }
 };
 
 onMounted(() => {
@@ -97,7 +119,7 @@ const handleBackToGenerate = () => {
 <template>
   <div class="render-page">
     <header class="page-header">
-      <h2 class="page-title">渲染动画</h2>
+      <h1 class="page-title">渲染动画</h1>
       <p class="page-subtitle">实时渲染进度和预览</p>
     </header>
 
@@ -107,7 +129,7 @@ const handleBackToGenerate = () => {
       <h3>还没有可渲染的动画</h3>
       <p>请先在生成页创建动画脚本</p>
       <button class="hero-cta" @click="handleBackToGenerate">
-        ✨ 去生成脚本
+        去生成脚本
       </button>
     </div>
 
@@ -115,10 +137,10 @@ const handleBackToGenerate = () => {
       <!-- 左侧：进度 & 日志 -->
       <div class="progress-panel">
         <div class="card">
-          <h3 class="card-title">渲染进度</h3>
+          <h2 class="card-title">渲染进度</h2>
 
           <div class="demo-banner">
-            ⚠️ 当前为演示模式，渲染进度为模拟数据
+            当前为演示模式，渲染进度为模拟数据
           </div>
 
           <div class="progress-container">
@@ -150,7 +172,7 @@ const handleBackToGenerate = () => {
 
         <!-- 日志 -->
         <div class="card">
-          <h3 class="card-title">渲染日志</h3>
+          <h2 class="card-title">渲染日志</h2>
           <div class="logs-container">
             <div v-for="(log, index) in logs" :key="index" class="log-entry">
               {{ log }}
@@ -170,14 +192,22 @@ const handleBackToGenerate = () => {
               :class="{ active: activeTab === 'script' }"
               @click="activeTab = 'script'"
             >
-              📜 查看脚本
+              查看脚本
             </button>
             <button
               class="tab-button"
               :class="{ active: activeTab === 'preview' }"
               @click="activeTab = 'preview'"
             >
-              🎬 动画预览
+              动画预览
+            </button>
+            <button
+              v-if="phase === 'done' && videoPath"
+              class="tab-button"
+              :class="{ active: activeTab === 'video' }"
+              @click="activeTab = 'video'"
+            >
+              视频播放
             </button>
           </div>
 
@@ -190,7 +220,7 @@ const handleBackToGenerate = () => {
           </div>
 
           <!-- 动画预览（占位） -->
-          <div v-else class="animation-preview">
+          <div v-else-if="activeTab === 'preview'" class="animation-preview">
             <div v-if="phase === 'rendering'" class="preview-loading">
               <div class="spinner"></div>
               <p>渲染中...</p>
@@ -201,25 +231,30 @@ const handleBackToGenerate = () => {
               <p class="placeholder-hint">真实渲染引擎接入后可在此预览动画效果</p>
             </div>
           </div>
+
+          <!-- 视频播放器 -->
+          <div v-else-if="activeTab === 'video'" class="video-player-wrapper">
+            <VideoPlayer :src="videoPath" :autoplay="false" />
+          </div>
         </div>
 
         <!-- 操作按钮 -->
         <div class="action-buttons">
           <button class="secondary-button" @click="handleBackToGenerate">
-            ← 返回修改
+            返回修改
           </button>
           <button
             class="secondary-button"
             @click="handleExportScript"
           >
-            💾 导出脚本
+            导出脚本
           </button>
           <button
             class="primary-button"
             @click="handleExportVideo"
             :disabled="phase !== 'done'"
           >
-            🎥 导出视频
+            导出视频
           </button>
         </div>
 
@@ -232,88 +267,96 @@ const handleBackToGenerate = () => {
 
 <style scoped>
 .render-page {
-  max-width: 1600px;
+  max-width: 1400px;
   margin: 0 auto;
+  padding: var(--spacing-page);
 }
 
+/* ==================== 页面头部 ==================== */
+
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .page-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .page-subtitle {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 15px;
+  color: var(--text-secondary);
   margin: 0;
 }
 
-/* 空状态 */
+/* ==================== 空状态 ==================== */
+
 .empty-state {
   text-align: center;
-  padding: 6rem 2rem;
+  padding: 80px 20px;
 }
 
 .empty-icon {
-  font-size: 5rem;
+  font-size: 64px;
   display: block;
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }
 
 .empty-state h3 {
-  font-size: 1.5rem;
+  font-size: 22px;
   font-weight: 600;
-  color: #fff;
-  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .empty-state p {
-  font-size: 1rem;
-  color: #9ca3af;
-  margin: 0 0 2rem;
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 0 32px;
 }
 
 .hero-cta {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 2.5rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  justify-content: center;
+  padding: 12px 32px;
+  background-color: var(--accent);
   border: none;
-  border-radius: 2rem;
-  color: #fff;
-  font-size: 1.1rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .hero-cta:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.35);
+  background-color: var(--accent-hover);
+  transform: scale(1.02);
 }
 
-/* 渲染布局 */
+.hero-cta:active {
+  transform: scale(0.98);
+}
+
+/* ==================== 渲染布局 ==================== */
+
 .render-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  gap: var(--spacing-component);
 }
 
 .card {
-  background-color: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-card);
+  margin-bottom: var(--spacing-component);
+  box-shadow: var(--shadow-card);
 }
 
 .card:last-child {
@@ -321,38 +364,41 @@ const handleBackToGenerate = () => {
 }
 
 .card-title {
-  font-size: 1.125rem;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
-  margin: 0 0 1rem 0;
-  color: #ffffff;
+  margin: 0 0 var(--spacing-component) 0;
+  color: var(--text-primary);
 }
 
 .demo-banner {
-  padding: 0.5rem 1rem;
-  margin-bottom: 1rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 0.375rem;
-  font-size: 0.8rem;
-  color: #f59e0b;
+  padding: 10px 16px;
+  margin-bottom: var(--spacing-component);
+  background-color: rgba(255, 149, 0, 0.1);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  border-radius: var(--radius-input);
+  font-size: 13px;
+  color: var(--warning);
 }
 
+/* ==================== 进度条 ==================== */
+
 .progress-container {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .progress-bar {
-  height: 8px;
-  background-color: #2a2a4a;
-  border-radius: 4px;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 0.75rem;
+  margin-bottom: 12px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00d4ff 0%, #7c3aed 100%);
-  transition: width 0.3s ease;
+  background-color: var(--accent);
+  transition: width 0.3s var(--ease-apple);
 }
 
 .progress-info {
@@ -362,121 +408,126 @@ const handleBackToGenerate = () => {
 }
 
 .progress-percentage {
-  font-size: 1.5rem;
+  font-size: 24px;
   font-weight: 700;
-  color: #00d4ff;
+  color: var(--accent);
 }
 
 .progress-time,
 .progress-status {
-  font-size: 0.875rem;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
+
+/* ==================== 状态网格 ==================== */
 
 .status-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
+  gap: var(--spacing-component);
 }
 
 .status-item {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 .status-label {
-  font-size: 0.75rem;
-  color: #9ca3af;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .status-value {
-  font-size: 0.875rem;
+  font-size: 13px;
   font-weight: 500;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .status-value.active {
-  color: #22c55e;
+  color: var(--success);
 }
 
-/* 日志 */
+/* ==================== 日志 ==================== */
+
 .logs-container {
-  background-color: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  padding: 1rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: var(--spacing-card);
   height: 300px;
   overflow-y: auto;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 
 .log-entry {
-  color: #9ca3af;
-  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
   line-height: 1.5;
 }
 
 .logs-empty {
-  color: #6b7280;
+  color: var(--text-tertiary);
   text-align: center;
-  padding: 2rem 0;
+  padding: 32px 0;
 }
 
-/* Tab 切换 */
+/* ==================== Tab 切换 ==================== */
+
 .tab-bar {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 8px;
+  margin-bottom: var(--spacing-component);
 }
 
 .tab-button {
   flex: 1;
-  padding: 0.625rem 1rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #9ca3af;
-  font-size: 0.875rem;
+  padding: 10px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .tab-button:hover {
-  border-color: #00d4ff;
-  color: #fff;
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 
 .tab-button.active {
-  background: rgba(0, 212, 255, 0.1);
-  border-color: #00d4ff;
-  color: #00d4ff;
+  background-color: rgba(0, 122, 255, 0.08);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
-/* 脚本预览 */
+/* ==================== 预览区域 ==================== */
+
 .script-preview,
 .animation-preview {
-  background-color: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
   min-height: 350px;
   overflow: hidden;
 }
 
 .code-content {
-  padding: 1rem;
+  padding: var(--spacing-card);
   max-height: 450px;
   overflow: auto;
 }
 
 .code-content pre {
   margin: 0;
-  font-family: "Monaco", "Menlo", monospace;
-  font-size: 0.8125rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
   line-height: 1.6;
-  color: #e5e7eb;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -490,10 +541,11 @@ const handleBackToGenerate = () => {
   align-items: center;
   justify-content: center;
   height: 350px;
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
-/* 动画预览占位 */
+/* ==================== 动画预览占位 ==================== */
+
 .animation-preview {
   display: flex;
   align-items: center;
@@ -505,17 +557,17 @@ const handleBackToGenerate = () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  color: #9ca3af;
+  gap: var(--spacing-component);
+  color: var(--text-secondary);
   text-align: center;
-  padding: 2rem;
+  padding: var(--spacing-relaxed);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #2a2a4a;
-  border-top-color: #00d4ff;
+  border: 3px solid var(--bg-tertiary);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -525,56 +577,80 @@ const handleBackToGenerate = () => {
 }
 
 .placeholder-icon {
-  font-size: 3rem;
+  font-size: 48px;
 }
 
 .placeholder-hint {
-  font-size: 0.8rem;
-  color: #6b7280;
+  font-size: 13px;
+  color: var(--text-tertiary);
   margin: 0;
 }
 
-/* 操作按钮 */
+/* ==================== 视频播放器 ==================== */
+
+.video-player-wrapper {
+  padding: 0;
+  animation: fadeIn 0.3s var(--ease-apple);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==================== 操作按钮 ==================== */
+
 .action-buttons {
   display: flex;
-  gap: 0.75rem;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .secondary-button {
   flex: 1;
   min-width: 100px;
-  padding: 0.75rem 1rem;
-  background-color: #2a2a4a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 0.875rem;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-button);
+  color: var(--text-primary);
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .secondary-button:hover {
-  background-color: #3a3a5a;
+  background-color: var(--bg-tertiary);
 }
 
 .primary-button {
   flex: 1;
   min-width: 100px;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  padding: 12px 16px;
+  background-color: var(--accent);
   border: none;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 0.875rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .primary-button:hover:not(:disabled) {
-  box-shadow: 0 4px 16px rgba(0, 212, 255, 0.3);
+  background-color: var(--accent-hover);
+  transform: scale(1.01);
+}
+
+.primary-button:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 .primary-button:disabled {
@@ -583,15 +659,17 @@ const handleBackToGenerate = () => {
 }
 
 .export-toast {
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: 0.5rem;
-  color: #f59e0b;
-  font-size: 0.875rem;
+  margin-top: var(--spacing-component);
+  padding: 12px 16px;
+  background-color: rgba(255, 149, 0, 0.1);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  border-radius: var(--radius-input);
+  color: var(--warning);
+  font-size: 13px;
   text-align: center;
 }
+
+/* ==================== 响应式 ==================== */
 
 @media (max-width: 1024px) {
   .render-content {

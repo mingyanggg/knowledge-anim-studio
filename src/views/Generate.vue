@@ -8,6 +8,7 @@ import { analyzeConcept, type AnalysisResult } from "../services/concept-analyze
 import { stylePresets, type StylePreset } from "../data/style-presets";
 import { exportScriptFile } from "../services/ai-generator";
 import * as jobManager from "../services/job-manager";
+import type { UsageResult } from "../services/ai-generator";
 
 // 导出反馈
 const exportMsg = ref("");
@@ -28,15 +29,34 @@ const maxChars = 2000;
 const analysis = ref<AnalysisResult | null>(null);
 
 // 风格预设
-const selectedPresetId = ref("deep-space");
+const selectedPresetId = ref("minimal-light");
 const selectedPreset = computed<StylePreset>(() =>
   stylePresets.find(p => p.id === selectedPresetId.value) ?? stylePresets[0]
 );
 
+// 解说风格
+interface NarrationStyle {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+const narrationStyles: NarrationStyle[] = [
+  { id: "classroom", name: "课堂讲解", icon: "🎓", description: "教师口吻，循序渐进，适合教学场景" },
+  { id: "popular-science", name: "科普传播", icon: "📢", description: "生动有趣，通俗易懂，面向大众" },
+  { id: "academic", name: "学术报告", icon: "🎯", description: "专业严谨，逻辑清晰，适合学术场合" },
+  { id: "fun-animation", name: "趣味动画", icon: "🎬", description: "轻松活泼，富有创意，吸引眼球" },
+  { id: "minimal-tech", name: "极简科技", icon: "🖥️", description: "简洁精准，专业可靠，科技感强" },
+  { id: "storytelling", name: "故事叙述", icon: "📖", description: "叙事性强，引人入胜，情感共鸣" },
+];
+
+const selectedNarrationStyle = ref<NarrationStyle>(narrationStyles[0]);
+
 // 高级参数
 const params = ref({
-  primaryColor: "#00d4ff",
-  secondaryColor: "#7c3aed",
+  primaryColor: "#007aff",
+  secondaryColor: "#5856d6",
   duration: 30,
   fps: 60,
   resolution: "1080p" as "1080p" | "4k",
@@ -53,9 +73,9 @@ const canGenerate = computed(() => description.value.trim().length > 0);
 const charCount = computed(() => description.value.length);
 const charPercent = computed(() => Math.min((charCount.value / maxChars) * 100, 100));
 const charColor = computed(() => {
-  if (charCount.value > maxChars) return "#ef4444";
-  if (charCount.value > maxChars * 0.9) return "#f59e0b";
-  return "#6b7280";
+  if (charCount.value > maxChars) return "var(--error)";
+  if (charCount.value > maxChars * 0.9) return "var(--warning)";
+  return "var(--text-tertiary)";
 });
 
 // 生成按钮 loading 状态
@@ -65,6 +85,19 @@ const isGenerating = ref(false);
 const activeJob = ref<jobManager.Job | null>(null);
 const jobProgress = computed(() => activeJob.value?.progress ?? 0);
 const jobMessage = computed(() => activeJob.value?.message ?? "");
+
+// 用量信息
+const usageInfo = computed<UsageResult | null>(() => generateStore.usage);
+const usageText = computed(() => {
+  const usage = usageInfo.value;
+  if (!usage) return "";
+  const max = usage.maxPerMonth === -1 ? "不限" : usage.maxPerMonth;
+  return `${usage.planName} · 本月已用 ${usage.usedThisMonth}/${max} 次`;
+});
+
+// 错误提示
+const showError = ref(false);
+const errorMessage = ref("");
 
 
 // 输入时实时分析
@@ -90,7 +123,7 @@ watch(selectedPresetId, () => {
   settingsStore.updateSettings({ stylePreset: selectedPresetId.value } as any);
 });
 
-onMounted(() => {
+onMounted(async () => {
   const templateId = route.query.template as string;
   if (templateId) {
     selectedTemplateId.value = templateId;
@@ -103,6 +136,9 @@ onMounted(() => {
   // 从设置恢复风格
   const saved = (settingsStore.settings as any).stylePreset;
   if (saved) selectedPresetId.value = saved;
+
+  // 获取用量信息
+  await generateStore.fetchUsage();
 });
 
 watch(selectedTemplateId, () => {
@@ -120,33 +156,50 @@ function fillFromTemplate() {
   }
 }
 
-/** 点击生成：创建任务 → mock 进度 → 跳转渲染页 */
+/** 点击生成：创建任务 → 调用 API → 跳转渲染页 */
 async function handleGenerate() {
   if (!canGenerate.value || isGenerating.value) return;
   isGenerating.value = true;
+  showError.value = false;
 
   // 创建任务
-  const job = jobManager.createJob("generate", "正在排队…");
+  const job = jobManager.createJob("generate", "正在生成…");
   activeJob.value = job;
 
   // 模拟进度
   jobManager.startMockProgress(job.id, {
     duration: 4000,
-    steps: ["分析概念…", "生成脚本…", "优化动画…", "脚本就绪！"],
+    steps: ["分析概念…", "生成脚本…", "优化动画…", "完成！"],
     onDone: async (finishedJob) => {
+      // 调用 API 生成
       await generateStore.generateScript({
         description: description.value,
         templateId: selectedTemplateId.value,
-        params: { ...params.value, style: "modern" },
+        params: {
+          ...params.value,
+          style: "modern",
+          narrationStyle: selectedNarrationStyle.value.id,
+        },
       });
+
       activeJob.value = finishedJob;
       isGenerating.value = false;
+
+      // 检查是否有错误
+      if (generateStore.error) {
+        showError.value = true;
+        errorMessage.value = generateStore.error;
+        return;
+      }
+
       // 跳转渲染页
       router.push("/render");
     },
     onFail: (failedJob) => {
       activeJob.value = failedJob;
       isGenerating.value = false;
+      showError.value = true;
+      errorMessage.value = "生成失败，请稍后重试";
     },
   });
 }
@@ -177,12 +230,16 @@ async function handleExportScript() {
 <template>
   <div class="generate-page">
     <header class="page-header">
-      <h2 class="page-title">AI 生成</h2>
+      <h1 class="page-title">AI 生成</h1>
       <p class="page-subtitle">描述你的知识点，AI 将自动生成动画脚本</p>
+      <!-- 用量显示 -->
+      <div v-if="usageInfo" class="usage-display">
+        {{ usageText }}
+      </div>
     </header>
 
     <div class="generate-content">
-      <!-- ===== 左侧：输入面板 ===== -->
+      <!-- 左侧：输入面板 -->
       <div class="input-panel">
         <!-- 模板选择 -->
         <div class="form-group">
@@ -225,37 +282,59 @@ async function handleExportScript() {
           </div>
         </div>
 
+        <!-- 风格预设选择 -->
+        <div class="style-section">
+          <label class="section-label">视觉风格</label>
+          <div class="preset-grid">
+            <button
+              v-for="preset in stylePresets"
+              :key="preset.id"
+              class="preset-card"
+              :class="{ active: selectedPresetId === preset.id }"
+              @click="selectedPresetId = preset.id"
+            >
+              <div class="preset-colors">
+                <span class="color-dot" :style="{ background: preset.primaryColor }" />
+                <span class="color-dot" :style="{ background: preset.secondaryColor }" />
+              </div>
+              <span class="preset-name">{{ preset.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 解说风格选择 -->
+        <div class="style-section">
+          <label class="section-label">解说风格</label>
+          <div class="narration-grid">
+            <button
+              v-for="style in narrationStyles"
+              :key="style.id"
+              class="narration-card"
+              :class="{ active: selectedNarrationStyle.id === style.id }"
+              @click="selectedNarrationStyle = style"
+            >
+              <span class="narration-icon">{{ style.icon }}</span>
+              <div class="narration-content">
+                <span class="narration-name">{{ style.name }}</span>
+                <span class="narration-desc">{{ style.description }}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <!-- 高级参数切换 -->
         <button class="toggle-button" @click="showAdvanced = !showAdvanced">
-          <span>⚙️ 高级参数</span>
-          <span class="toggle-arrow" :class="{ open: showAdvanced }">▶</span>
+          <span>高级参数</span>
+          <span class="toggle-icon" :class="{ open: showAdvanced }">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
         </button>
 
         <!-- 高级参数面板 -->
         <Transition name="slide">
           <div v-if="showAdvanced" class="advanced-params">
-            <!-- 风格预设选择 -->
-            <div class="param-group">
-              <label class="param-label">视觉风格</label>
-              <div class="preset-grid">
-                <button
-                  v-for="preset in stylePresets"
-                  :key="preset.id"
-                  class="preset-card"
-                  :class="{ active: selectedPresetId === preset.id }"
-                  @click="selectedPresetId = preset.id"
-                >
-                  <div class="preset-colors">
-                    <span class="color-dot" :style="{ background: preset.primaryColor }" />
-                    <span class="color-dot" :style="{ background: preset.secondaryColor }" />
-                    <span class="color-dot" :style="{ background: preset.background }" />
-                  </div>
-                  <span class="preset-name">{{ preset.name }}</span>
-                  <span class="preset-desc">{{ preset.description }}</span>
-                </button>
-              </div>
-            </div>
-
             <div class="param-group">
               <label class="param-label">颜色主题</label>
               <div class="color-picker-group">
@@ -307,31 +386,34 @@ async function handleExportScript() {
           :disabled="!canGenerate || isGenerating"
           @click="handleGenerate"
         >
-          <span v-if="!isGenerating">✨ 生成脚本</span>
+          <span v-if="!isGenerating">生成脚本</span>
           <span v-else class="btn-loading">
-            <span class="spinner" /> 处理中…
+            <span class="spinner" />
+            处理中…
           </span>
         </button>
       </div>
 
-      <!-- ===== 右侧：脚本预览 ===== -->
+      <!-- 右侧：脚本预览 -->
       <div class="preview-panel">
         <div class="preview-header">
-          <h3 class="preview-title">生成的脚本</h3>
-          <button
-            v-if="generateStore.generatedScript"
-            class="action-button"
-            @click="generateStore.copyScript"
-          >
-            📋 复制
-          </button>
-          <button
-            v-if="generateStore.generatedScript"
-            class="action-button"
-            @click="handleExportScript"
-          >
-            💾 导出脚本
-          </button>
+          <h2 class="preview-title">生成的脚本</h2>
+          <div class="preview-actions">
+            <button
+              v-if="generateStore.generatedScript"
+              class="action-button"
+              @click="generateStore.copyScript"
+            >
+              复制
+            </button>
+            <button
+              v-if="generateStore.generatedScript"
+              class="action-button"
+              @click="handleExportScript"
+            >
+              导出脚本
+            </button>
+          </div>
         </div>
         <div v-if="exportMsg" class="export-toast">{{ exportMsg }}</div>
 
@@ -352,8 +434,23 @@ async function handleExportScript() {
           </div>
         </div>
 
-        <div v-if="generateStore.error" class="error-message">
-          ❌ {{ generateStore.error }}
+        <!-- 错误提示 -->
+        <Transition name="fade">
+          <div v-if="showError && errorMessage" class="error-message-inline">
+            <span class="error-icon">⚠️</span>
+            <span class="error-text">{{ errorMessage }}</span>
+            <button
+              v-if="errorMessage.includes('升级')"
+              class="upgrade-button"
+              @click="router.push('/settings')"
+            >
+              升级订阅
+            </button>
+          </div>
+        </Transition>
+
+        <div v-if="generateStore.error && !showError" class="error-message">
+          {{ generateStore.error }}
         </div>
       </div>
     </div>
@@ -362,98 +459,117 @@ async function handleExportScript() {
 
 <style scoped>
 .generate-page {
-  max-width: 1600px;
+  max-width: 1400px;
   margin: 0 auto;
+  padding: var(--spacing-page);
 }
 
+/* ==================== 页面头部 ==================== */
+
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .page-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 0.5rem;
-  background: linear-gradient(135deg, #00d4ff, #7c3aed);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .page-subtitle {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 15px;
+  color: var(--text-secondary);
   margin: 0;
 }
+
+/* 用量显示 */
+.usage-display {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+/* ==================== 内容布局 ==================== */
 
 .generate-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  gap: var(--spacing-component);
   align-items: start;
 }
 
-/* ---- 输入面板 ---- */
+/* ==================== 输入面板 ==================== */
+
 .input-panel {
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-card);
+  box-shadow: var(--shadow-card);
 }
 
+/* 表单组 */
 .form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .form-label {
   display: block;
-  font-size: 0.875rem;
+  font-size: 13px;
   font-weight: 500;
-  color: #fff;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
 }
 
 .form-select,
 .form-textarea {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #fff;
-  font-size: 0.875rem;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 15px;
   font-family: inherit;
-  transition: border-color 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .form-select:focus,
 .form-textarea:focus {
   outline: none;
-  border-color: #00d4ff;
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 .form-select option,
 .form-textarea::placeholder {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .form-textarea {
   resize: vertical;
-  min-height: 150px;
+  min-height: 120px;
 }
 
-/* ---- 概念分析标签 ---- */
+/* 概念分析标签 */
 .analysis-tag {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  padding: 0.375rem 0.875rem;
-  border-radius: 1rem;
-  font-size: 0.8125rem;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
   font-weight: 500;
-  transition: all 0.25s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .analysis-tag .tag-dot {
@@ -463,83 +579,202 @@ async function handleExportScript() {
 }
 
 .analysis-tag.latex {
-  background: rgba(124, 58, 237, 0.15);
-  color: #a78bfa;
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  background-color: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.2);
 }
-.analysis-tag.latex .tag-dot { background: #a78bfa; }
+.analysis-tag.latex .tag-dot { background: #7c3aed; }
 
 .analysis-tag.template {
-  background: rgba(0, 212, 255, 0.1);
-  color: #00d4ff;
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  background-color: rgba(0, 122, 255, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(0, 122, 255, 0.2);
 }
-.analysis-tag.template .tag-dot { background: #00d4ff; }
+.analysis-tag.template .tag-dot { background: var(--accent); }
 
 .analysis-tag.ai {
-  background: rgba(52, 211, 153, 0.1);
-  color: #34d399;
-  border: 1px solid rgba(52, 211, 153, 0.3);
+  background-color: rgba(52, 199, 89, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(52, 199, 89, 0.2);
 }
-.analysis-tag.ai .tag-dot { background: #34d399; }
+.analysis-tag.ai .tag-dot { background: var(--success); }
 
 /* 字数统计 */
 .char-count {
-  font-size: 0.75rem;
+  font-size: 11px;
   text-align: right;
-  margin-top: 0.5rem;
-  transition: color 0.2s;
+  margin-top: 8px;
+  transition: color var(--transition-base) var(--ease-apple);
 }
 
 .char-bar {
-  height: 3px;
-  background: #2a2a4a;
+  height: 4px;
+  background-color: var(--bg-tertiary);
   border-radius: 2px;
-  margin-top: 0.25rem;
+  margin-top: 4px;
   overflow: hidden;
 }
 
 .char-bar-fill {
   height: 100%;
   border-radius: 2px;
-  transition: width 0.2s, background 0.2s;
+  transition: width var(--transition-base) var(--ease-apple),
+              background var(--transition-base) var(--ease-apple);
 }
 
-/* ---- 高级参数折叠 ---- */
+/* ==================== 风格选择 ==================== */
+
+.style-section {
+  margin-bottom: var(--spacing-component);
+}
+
+.section-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* 视觉风格网格 */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.preset-card:hover {
+  border-color: var(--accent);
+  background-color: var(--bg-tertiary);
+}
+
+.preset-card.active {
+  border-color: var(--accent);
+  background-color: rgba(0, 122, 255, 0.08);
+}
+
+.preset-colors {
+  display: flex;
+  gap: 4px;
+}
+
+.color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.preset-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 解说风格网格 */
+.narration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.narration-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+  text-align: left;
+}
+
+.narration-card:hover {
+  border-color: var(--accent);
+  background-color: var(--bg-tertiary);
+}
+
+.narration-card.active {
+  border-color: var(--accent);
+  background-color: rgba(0, 122, 255, 0.08);
+}
+
+.narration-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.narration-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.narration-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.narration-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ==================== 高级参数 ==================== */
+
 .toggle-button {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
-  background: #2a2a4a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #fff;
-  font-size: 0.875rem;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
+  margin-bottom: var(--spacing-component);
 }
 
 .toggle-button:hover {
-  background: #3a3a5a;
+  background-color: var(--bg-tertiary);
 }
 
-.toggle-arrow {
-  transition: transform 0.25s ease;
-  font-size: 0.7rem;
+.toggle-icon {
+  transition: transform var(--transition-base) var(--ease-apple);
+  color: var(--text-secondary);
 }
 
-.toggle-arrow.open {
-  transform: rotate(90deg);
+.toggle-icon.open {
+  transform: rotate(180deg);
 }
 
 .slide-enter-active,
 .slide-leave-active {
-  transition: all 0.3s ease;
+  transition: all var(--transition-slow) var(--ease-apple);
   overflow: hidden;
-  max-height: 800px;
+  max-height: 500px;
 }
 
 .slide-enter-from,
@@ -551,108 +786,53 @@ async function handleExportScript() {
 }
 
 .advanced-params {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #2a2a4a;
+  padding-top: var(--spacing-component);
+  border-top: 1px solid var(--border);
 }
 
 .param-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .param-label {
   display: block;
-  font-size: 0.875rem;
+  font-size: 13px;
   font-weight: 500;
-  color: #fff;
-  margin-bottom: 0.5rem;
-}
-
-/* ---- 风格预设网格 ---- */
-.preset-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-
-.preset-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.375rem;
-  padding: 0.75rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-}
-
-.preset-card:hover {
-  border-color: #00d4ff;
-}
-
-.preset-card.active {
-  border-color: #00d4ff;
-  background: rgba(0, 212, 255, 0.05);
-}
-
-.preset-colors {
-  display: flex;
-  gap: 0.375rem;
-}
-
-.color-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-}
-
-.preset-name {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: #fff;
-}
-
-.preset-desc {
-  font-size: 0.6875rem;
-  color: #6b7280;
-  line-height: 1.3;
+  color: var(--text-primary);
+  margin-bottom: 8px;
 }
 
 .color-picker-group {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: var(--spacing-component);
 }
 
 .color-input {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .color-input label {
-  font-size: 0.75rem;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .color-input input[type="color"] {
   width: 100%;
-  height: 40px;
-  padding: 0.25rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
+  height: 44px;
+  padding: 4px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
   cursor: pointer;
 }
 
 .range-input {
   width: 100%;
   height: 6px;
-  background: #2a2a4a;
+  background-color: var(--bg-tertiary);
   border-radius: 3px;
   outline: none;
   -webkit-appearance: none;
@@ -660,81 +840,89 @@ async function handleExportScript() {
 
 .range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #00d4ff;
+  width: 18px;
+  height: 18px;
+  background-color: var(--accent);
   border-radius: 50%;
   cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .range-input::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #00d4ff;
+  width: 18px;
+  height: 18px;
+  background-color: var(--accent);
   border-radius: 50%;
   cursor: pointer;
   border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* ---- 任务进度 ---- */
+/* ==================== 任务进度 ==================== */
+
 .job-progress {
-  margin-top: 1rem;
-  padding: 0.875rem 1rem;
-  background: rgba(0, 212, 255, 0.05);
-  border: 1px solid rgba(0, 212, 255, 0.15);
-  border-radius: 0.5rem;
+  margin-top: var(--spacing-component);
+  padding: 12px 16px;
+  background-color: rgba(0, 122, 255, 0.05);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+  border-radius: var(--radius-input);
 }
 
 .progress-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 8px;
 }
 
 .progress-message {
-  font-size: 0.8125rem;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .progress-percent {
-  font-size: 0.8125rem;
+  font-size: 13px;
   font-weight: 600;
-  color: #00d4ff;
+  color: var(--accent);
 }
 
 .progress-bar {
-  height: 6px;
-  background: #2a2a4a;
-  border-radius: 3px;
+  height: 4px;
+  background-color: var(--bg-tertiary);
+  border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #00d4ff, #7c3aed);
-  border-radius: 3px;
-  transition: width 0.4s ease;
+  background-color: var(--accent);
+  border-radius: 2px;
+  transition: width 0.4s var(--ease-apple);
 }
 
-/* ---- 生成按钮 ---- */
+/* ==================== 生成按钮 ==================== */
+
 .generate-button {
   width: 100%;
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: linear-gradient(135deg, #00d4ff, #7c3aed);
+  margin-top: var(--spacing-component);
+  padding: 12px;
+  background-color: var(--accent);
   border: none;
-  border-radius: 0.5rem;
-  color: #fff;
-  font-size: 1rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .generate-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.3);
+  background-color: var(--accent-hover);
+  transform: scale(1.01);
+}
+
+.generate-button:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 .generate-button:disabled {
@@ -745,66 +933,75 @@ async function handleExportScript() {
 .btn-loading {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: center;
+  gap: 8px;
 }
 
-/* ---- 预览面板 ---- */
+/* ==================== 预览面板 ==================== */
+
 .preview-panel {
   position: sticky;
-  top: 2rem;
+  top: var(--spacing-page);
 }
 
 .preview-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .preview-title {
-  font-size: 1.25rem;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0;
 }
 
+.preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .action-button {
-  padding: 0.5rem 1rem;
-  background: #2a2a4a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.375rem;
-  color: #fff;
-  font-size: 0.875rem;
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 13px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .action-button:hover {
-  background: #3a3a5a;
+  background-color: var(--bg-tertiary);
 }
 
 .code-preview {
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  height: 500px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  height: 600px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-card);
 }
 
 .code-content {
   flex: 1;
   overflow: auto;
-  padding: 1rem;
+  padding: var(--spacing-card);
 }
 
 .code-content pre {
   margin: 0;
-  font-family: "Monaco", "Menlo", monospace;
-  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 13px;
   line-height: 1.6;
-  color: #e5e7eb;
+  color: var(--text-primary);
 }
 
 .code-content code {
@@ -817,15 +1014,15 @@ async function handleExportScript() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1rem;
-  color: #9ca3af;
+  gap: var(--spacing-component);
+  color: var(--text-secondary);
 }
 
 .spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #2a2a4a;
-  border-top-color: #00d4ff;
+  border: 3px solid var(--bg-tertiary);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -840,46 +1037,118 @@ async function handleExportScript() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  color: #9ca3af;
+  gap: 8px;
+  color: var(--text-secondary);
   text-align: center;
-  padding: 2rem;
+  padding: var(--spacing-relaxed);
 }
 
 .empty-icon {
-  font-size: 3rem;
-  margin-bottom: 0.5rem;
+  font-size: 48px;
+  margin-bottom: 8px;
 }
 
 .empty-hint {
-  font-size: 0.875rem;
-  color: #6b7280;
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
 .error-message {
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 0.5rem;
-  color: #ef4444;
-  font-size: 0.875rem;
+  margin-top: var(--spacing-component);
+  padding: 12px 16px;
+  background-color: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  border-radius: var(--radius-input);
+  color: var(--error);
+  font-size: 13px;
+}
+
+/* 内联错误提示 */
+.error-message-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: var(--spacing-component);
+  padding: 12px 16px;
+  background-color: rgba(255, 149, 0, 0.1);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  border-radius: var(--radius-input);
+  font-size: 13px;
+}
+
+.error-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.error-text {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.upgrade-button {
+  padding: 6px 12px;
+  background-color: var(--accent);
+  border: none;
+  border-radius: var(--radius-input);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+  white-space: nowrap;
+}
+
+.upgrade-button:hover {
+  background-color: var(--accent-hover);
+  transform: scale(1.02);
+}
+
+/* Fade 动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-base) var(--ease-apple);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .export-toast {
-  margin-top: 0.75rem;
-  padding: 0.5rem 1rem;
-  background: rgba(52, 211, 153, 0.1);
-  border: 1px solid rgba(52, 211, 153, 0.3);
-  border-radius: 0.5rem;
-  color: #34d399;
-  font-size: 0.8125rem;
+  margin-bottom: var(--spacing-component);
+  padding: 10px 16px;
+  background-color: rgba(52, 199, 89, 0.1);
+  border: 1px solid rgba(52, 199, 89, 0.2);
+  border-radius: var(--radius-input);
+  color: var(--success);
+  font-size: 13px;
   text-align: center;
 }
 
+/* ==================== 响应式 ==================== */
+
 @media (max-width: 1024px) {
-  .generate-content { grid-template-columns: 1fr; }
-  .preview-panel { position: static; }
-  .preset-grid { grid-template-columns: 1fr; }
+  .generate-content {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-panel {
+    position: static;
+  }
+
+  .preset-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .narration-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .preset-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>

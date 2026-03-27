@@ -19,167 +19,153 @@ const isActive = (path: string) => {
 
 <template>
   <div class="app-container">
-    <!-- 顶部导航栏 -->
-    <header class="top-nav">
-      <div class="nav-left">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <!-- Logo 区域 -->
+      <div class="sidebar-header">
         <span class="app-logo">🧪</span>
         <h1 class="app-title">知识动画工坊</h1>
       </div>
-      <nav class="nav-center">
+
+      <!-- 导航菜单 -->
+      <nav class="sidebar-nav">
         <router-link
           v-for="item in menuItems"
           :key="item.path"
           :to="item.path"
-          class="nav-link"
+          class="nav-item"
           :class="{ active: isActive(item.path) }"
         >
           <span class="nav-icon">{{ item.icon }}</span>
           <span class="nav-text">{{ item.name }}</span>
         </router-link>
       </nav>
-      <div class="nav-right">
+
+      <!-- 底部状态 -->
+      <div class="sidebar-footer">
         <span class="status-pill free">Free</span>
       </div>
-    </header>
+    </aside>
 
     <!-- 主内容区 -->
     <main class="main-content">
       <router-view />
     </main>
-
-    <!-- 底部状态栏 -->
-    <footer class="status-bar">
-      <span class="status-text">● 就绪</span>
-      <span class="version-text">v0.1.0</span>
-    </footer>
   </div>
 </template>
 
 <style scoped>
 .app-container {
   display: flex;
-  flex-direction: column;
   height: 100vh;
-  background-color: #0f0f1a;
-  color: #ffffff;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
-/* 顶部导航 */
-.top-nav {
+/* ==================== 侧边栏 ==================== */
+
+.sidebar {
+  width: 260px;
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  height: 56px;
-  padding: 0 1.5rem;
-  background-color: #1a1a2e;
-  border-bottom: 1px solid #2a2a4a;
+  flex-direction: column;
   flex-shrink: 0;
 }
 
-.nav-left {
+/* 侧边栏头部 */
+.sidebar-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-width: 200px;
+  gap: 12px;
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .app-logo {
-  font-size: 1.5rem;
+  font-size: 32px;
+  line-height: 1;
 }
 
 .app-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
   margin: 0;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
-.nav-center {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+/* 导航菜单 */
+.sidebar-nav {
   flex: 1;
-  justify-content: center;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.nav-link {
+.nav-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  color: #9ca3af;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
   text-decoration: none;
-  font-size: 0.875rem;
+  font-size: 15px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
-.nav-link:hover {
-  background-color: #2a2a4a;
-  color: #ffffff;
+.nav-item:hover {
+  background-color: var(--bg-tertiary);
 }
 
-.nav-link.active {
-  background-color: #2a2a4a;
-  color: #00d4ff;
+.nav-item.active {
+  background-color: var(--accent);
+  color: white;
 }
 
 .nav-icon {
-  font-size: 1rem;
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
-.nav-right {
-  min-width: 200px;
+.nav-text {
+  flex: 1;
+}
+
+/* 侧边栏底部 */
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
   display: flex;
   justify-content: flex-end;
 }
 
 .status-pill {
-  padding: 0.25rem 0.75rem;
-  border-radius: 1rem;
-  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
   font-weight: 600;
 }
 
 .status-pill.free {
-  background-color: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background-color: rgba(52, 199, 89, 0.1);
+  color: var(--success);
 }
 
 .status-pill.pro {
-  background-color: rgba(124, 58, 237, 0.15);
-  color: #7c3aed;
+  background-color: rgba(10, 132, 255, 0.1);
+  color: var(--accent);
 }
 
-/* 主内容 */
+/* ==================== 主内容区 ==================== */
+
 .main-content {
   flex: 1;
   overflow-y: auto;
-  padding: 2rem;
-}
-
-/* 底部状态栏 */
-.status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 32px;
-  padding: 0 1.5rem;
-  background-color: #1a1a2e;
-  border-top: 1px solid #2a2a4a;
-  flex-shrink: 0;
-}
-
-.status-text {
-  font-size: 0.75rem;
-  color: #22c55e;
-}
-
-.version-text {
-  font-size: 0.75rem;
-  color: #6b7280;
+  background-color: var(--bg-primary);
 }
 </style>

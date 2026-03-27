@@ -46,13 +46,12 @@ const features = [
   <div class="home-page">
     <!-- ====== Hero 区域 ====== -->
     <section class="hero-section">
-      <div class="hero-glow" />
       <h1 class="hero-title">让知识动起来</h1>
       <p class="hero-subtitle">
         用动画的方式理解数学、物理、化学 —— 输入知识点，一键生成教学动画
       </p>
       <button class="hero-cta" @click="goToGenerate()">
-        ✨ 开始创作
+        开始创作
       </button>
     </section>
 
@@ -136,40 +135,32 @@ const features = [
 </template>
 
 <style scoped>
-/* ---- Hero ---- */
-.hero-section {
-  position: relative;
-  text-align: center;
-  padding: 5rem 2rem 4rem;
-  overflow: hidden;
+.home-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--spacing-page);
 }
 
-.hero-glow {
-  position: absolute;
-  top: -120px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(0, 212, 255, 0.15) 0%, transparent 70%);
-  pointer-events: none;
+/* ==================== Hero 区域 ==================== */
+
+.hero-section {
+  text-align: center;
+  padding: 60px 20px;
 }
 
 .hero-title {
-  font-size: 3.5rem;
-  font-weight: 800;
-  margin: 0 0 1rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  position: relative;
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
 }
 
 .hero-subtitle {
-  font-size: 1.2rem;
-  color: #9ca3af;
-  margin: 0 0 2rem;
+  font-size: 17px;
+  color: var(--text-secondary);
+  margin: 0 0 32px;
   max-width: 540px;
   margin-left: auto;
   margin-right: auto;
@@ -179,228 +170,225 @@ const features = [
 .hero-cta {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 1rem 2.5rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  justify-content: center;
+  padding: 12px 32px;
+  background-color: var(--accent);
   border: none;
-  border-radius: 2rem;
-  color: #fff;
-  font-size: 1.1rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .hero-cta:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.35);
+  background-color: var(--accent-hover);
+  transform: scale(1.02);
 }
 
-/* ---- Features ---- */
+.hero-cta:active {
+  transform: scale(0.98);
+}
+
+/* ==================== 特色功能 ==================== */
+
 .features-section {
-  padding: 3rem 0;
+  padding: var(--spacing-relaxed) 0;
 }
 
 .features-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
+  gap: var(--spacing-component);
 }
 
 .feature-card {
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-card);
   text-align: center;
-  transition: border-color 0.2s, transform 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
+  box-shadow: var(--shadow-card);
 }
 
 .feature-card:hover {
-  border-color: #00d4ff;
-  transform: translateY(-4px);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
 }
 
 .feature-icon {
-  font-size: 2rem;
+  font-size: 40px;
   display: block;
-  margin-bottom: 0.75rem;
+  margin-bottom: 12px;
 }
 
 .feature-title {
-  font-size: 1rem;
+  font-size: 17px;
   font-weight: 600;
-  color: #fff;
-  margin: 0 0 0.5rem;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .feature-desc {
-  font-size: 0.85rem;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
   margin: 0;
   line-height: 1.5;
 }
 
-/* ---- Templates Section ---- */
+/* ==================== 模板区域 ==================== */
+
 .templates-section {
-  padding-top: 2rem;
+  padding-top: var(--spacing-relaxed);
 }
 
 .section-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .section-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 0.5rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .section-subtitle {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 15px;
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .search-input {
   width: 100%;
   max-width: 480px;
-  padding: 0.875rem 1rem;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #fff;
-  font-size: 1rem;
-  margin-bottom: 1rem;
-  transition: border-color 0.2s;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 15px;
+  margin-bottom: var(--spacing-component);
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #00d4ff;
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 .search-input::placeholder {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .category-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
+  gap: 8px;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .category-tab {
-  padding: 0.625rem 1.25rem;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 2rem;
-  color: #9ca3af;
-  font-size: 0.875rem;
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .category-tab:hover {
-  background: #2a2a4a;
-  color: #fff;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .category-tab.active {
-  background: #00d4ff;
-  border-color: #00d4ff;
-  color: #0f0f1a;
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-component);
 }
 
 .template-card {
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
+  box-shadow: var(--shadow-card);
 }
 
 .template-card:hover {
-  border-color: #00d4ff;
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.15);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
 }
 
 .template-cover {
   aspect-ratio: 16 / 9;
-  background: linear-gradient(135deg, #1a1a2e 0%, #2a2a4a 100%);
+  background-color: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
-}
-
-.template-cover::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, rgba(0, 212, 255, 0.1) 0%, transparent 70%);
+  border-bottom: 1px solid var(--border);
 }
 
 .template-emoji {
-  font-size: 4rem;
-  position: relative;
+  font-size: 64px;
 }
 
 .template-info {
-  padding: 1rem;
+  padding: 16px;
 }
 
 .template-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .template-title {
-  font-size: 1rem;
+  font-size: 17px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .template-badge {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-small);
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
 }
 
 .template-badge.free {
-  background: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
+  background-color: rgba(52, 199, 89, 0.1);
+  color: var(--success);
 }
 
 .template-badge.pro {
-  background: rgba(124, 58, 237, 0.2);
-  color: #7c3aed;
+  background-color: rgba(10, 132, 255, 0.1);
+  color: var(--accent);
 }
 
 .template-desc {
-  font-size: 0.85rem;
-  color: #9ca3af;
-  margin: 0 0 0.75rem;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -410,36 +398,49 @@ const features = [
 
 .template-meta {
   display: flex;
-  gap: 0.5rem;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .meta-tag {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  background: #2a2a4a;
-  border-radius: 0.25rem;
-  color: #6b7280;
+  font-size: 11px;
+  padding: 4px 8px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-small);
+  color: var(--text-tertiary);
 }
 
 .empty-state {
   text-align: center;
-  padding: 4rem 2rem;
-  color: #9ca3af;
+  padding: 64px 20px;
+  color: var(--text-secondary);
 }
 
 .empty-state span {
-  font-size: 3rem;
+  font-size: 48px;
   display: block;
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }
 
-/* 响应式 */
+/* ==================== 响应式 ==================== */
+
 @media (max-width: 900px) {
   .features-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .hero-title {
-    font-size: 2.5rem;
+    font-size: 36px;
+  }
+}
+
+@media (max-width: 600px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-title {
+    font-size: 28px;
   }
 }
 </style>

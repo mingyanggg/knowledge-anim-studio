@@ -8,7 +8,7 @@ const settingsStore = useSettingsStore();
 const subscriptionStore = useSubscriptionStore();
 
 // 风格预设
-const stylePresetId = ref("deep-space");
+const stylePresetId = ref("minimal-light");
 const savedPreset = (settingsStore.settings as any).stylePreset;
 if (savedPreset) stylePresetId.value = savedPreset;
 
@@ -109,7 +109,7 @@ const features = [
   <div class="settings-page">
     <!-- Header -->
     <header class="page-header">
-      <h2 class="page-title">设置</h2>
+      <h1 class="page-title">设置</h1>
       <p class="page-subtitle">配置应用设置和订阅</p>
     </header>
 
@@ -118,7 +118,7 @@ const features = [
       <div class="settings-left">
         <!-- 导出设置 -->
         <div class="card">
-          <h3 class="card-title">导出设置</h3>
+          <h2 class="card-title">导出设置</h2>
 
           <div class="form-group">
             <label class="form-label">导出格式</label>
@@ -168,7 +168,7 @@ const features = [
 
         <!-- 主题 -->
         <div class="card">
-          <h3 class="card-title">外观</h3>
+          <h2 class="card-title">外观</h2>
           <div class="form-group">
             <label class="form-label">主题</label>
             <div class="option-grid two">
@@ -192,7 +192,7 @@ const features = [
 
         <!-- 视觉风格预设 -->
         <div class="card">
-          <h3 class="card-title">视觉风格</h3>
+          <h2 class="card-title">视觉风格</h2>
           <p class="card-desc">选择动画的默认视觉风格，在生成页也可随时切换</p>
           <div class="preset-grid">
             <button
@@ -214,7 +214,7 @@ const features = [
 
         <!-- API Settings Card -->
         <div class="card">
-          <h3 class="card-title">API 配置</h3>
+          <h2 class="card-title">API 配置</h2>
 
           <div class="form-group">
             <label class="form-label">AI 服务提供商</label>
@@ -253,10 +253,10 @@ const features = [
 
           <div class="form-actions">
             <button class="test-button" @click="handleTestConnection">
-              🔗 测试连接
+              测试连接
             </button>
             <button class="save-button" @click="handleSaveSettings">
-              💾 保存设置
+              保存设置
             </button>
           </div>
 
@@ -267,7 +267,7 @@ const features = [
               class="alert"
               :class="testResult.success ? 'success' : 'error'"
             >
-              {{ testResult.success ? '✅' : '❌' }} {{ testResult.message }}
+              {{ testResult.success ? '✓' : '✕' }} {{ testResult.message }}
             </div>
           </transition>
         </div>
@@ -276,7 +276,7 @@ const features = [
         <div class="card">
           <div class="subscription-header">
             <div>
-              <h3 class="card-title">订阅状态</h3>
+              <h2 class="card-title">订阅状态</h2>
               <p class="subscription-status">
                 当前: <span :class="isPro ? 'pro' : 'free'">{{ isPro ? 'Pro 版本' : '免费版本' }}</span>
               </p>
@@ -287,7 +287,7 @@ const features = [
           </div>
 
           <div v-if="!isPro" class="activation-section">
-            <h4 class="section-title">激活 Pro 版本</h4>
+            <h3 class="section-title">激活 Pro 版本</h3>
             <div class="form-group">
               <label class="form-label">激活码</label>
               <input
@@ -298,13 +298,13 @@ const features = [
               />
             </div>
             <button class="activate-button" @click="handleActivateCode">
-              🔓 激活
+              激活
             </button>
           </div>
 
           <div v-else class="pro-info">
             <div class="pro-feature">
-              <span class="feature-icon">✅</span>
+              <span class="feature-icon">✓</span>
               <span>已解锁所有 Pro 功能</span>
             </div>
             <p class="pro-expiry">
@@ -318,7 +318,7 @@ const features = [
       <div class="settings-right">
         <!-- Features Comparison Card -->
         <div class="card">
-          <h3 class="card-title">功能对比</h3>
+          <h2 class="card-title">功能对比</h2>
 
           <div class="features-list">
             <div
@@ -331,8 +331,8 @@ const features = [
                 <span v-if="feature.pro" class="feature-badge pro">Pro</span>
               </div>
               <div class="feature-availability">
-                <span v-if="!feature.pro" class="check-icon">✅</span>
-                <span v-else-if="isPro" class="check-icon">✅</span>
+                <span v-if="!feature.pro" class="check-icon">✓</span>
+                <span v-else-if="isPro" class="check-icon">✓</span>
                 <span v-else class="lock-icon">🔒</span>
               </div>
             </div>
@@ -341,7 +341,7 @@ const features = [
 
         <!-- Pricing Card -->
         <div class="card pricing-card">
-          <h3 class="card-title">升级到 Pro</h3>
+          <h2 class="card-title">升级到 Pro</h2>
 
           <div class="pricing-info">
             <div class="price">
@@ -350,11 +350,11 @@ const features = [
             </div>
 
             <ul class="pricing-features">
-              <li>✅ 解锁所有 Pro 功能</li>
-              <li>✅ 4K 超高清渲染</li>
-              <li>✅ MP4 视频导出</li>
-              <li>✅ 优先技术支持</li>
-              <li>✅ 未来功能抢先体验</li>
+              <li>✓ 解锁所有 Pro 功能</li>
+              <li>✓ 4K 超高清渲染</li>
+              <li>✓ MP4 视频导出</li>
+              <li>✓ 优先技术支持</li>
+              <li>✓ 未来功能抢先体验</li>
             </ul>
 
             <button
@@ -369,7 +369,7 @@ const features = [
 
         <!-- About Card -->
         <div class="card">
-          <h3 class="card-title">关于</h3>
+          <h2 class="card-title">关于</h2>
 
           <div class="about-info">
             <div class="about-item">
@@ -389,42 +389,46 @@ const features = [
 
 <style scoped>
 .settings-page {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: var(--spacing-page);
 }
 
+/* ==================== 页面头部 ==================== */
+
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .page-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .page-subtitle {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 15px;
+  color: var(--text-secondary);
   margin: 0;
 }
+
+/* ==================== 设置内容布局 ==================== */
 
 .settings-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  gap: var(--spacing-component);
 }
 
 .card {
-  background-color: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-card);
+  margin-bottom: var(--spacing-component);
+  box-shadow: var(--shadow-card);
 }
 
 .card:last-child {
@@ -432,61 +436,66 @@ const features = [
 }
 
 .card-title {
-  font-size: 1.125rem;
+  font-family: var(--font-display);
+  font-size: 17px;
   font-weight: 600;
-  margin: 0 0 1rem 0;
-  color: #ffffff;
+  margin: 0 0 var(--spacing-component) 0;
+  color: var(--text-primary);
 }
 
+/* ==================== 表单元素 ==================== */
+
 .form-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .form-label {
   display: block;
-  font-size: 0.875rem;
+  font-size: 13px;
   font-weight: 500;
-  color: #ffffff;
-  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
 }
 
 .form-input {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background-color: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 0.875rem;
-  transition: all 0.2s;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 15px;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #00d4ff;
-  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 .form-input::placeholder {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
 .form-hint {
-  font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 0.5rem;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 8px;
 }
+
+/* ==================== 选项网格 ==================== */
 
 .provider-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  gap: 8px;
 }
 
 .option-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  gap: 8px;
 }
 
 .option-grid.two {
@@ -501,91 +510,105 @@ const features = [
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background-color: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
-  color: #9ca3af;
-  font-size: 0.875rem;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-secondary);
+  font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .provider-option:hover:not(:disabled) {
-  border-color: #00d4ff;
-  color: #ffffff;
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 
 .provider-option.active {
-  background-color: #00d4ff;
-  border-color: #00d4ff;
-  color: #0f0f1a;
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.provider-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .provider-icon {
-  font-size: 1.25rem;
+  font-size: 20px;
 }
+
+/* ==================== 表单操作按钮 ==================== */
 
 .form-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
+  gap: 8px;
+  margin-top: var(--spacing-component);
 }
 
 .test-button,
 .save-button {
-  padding: 0.75rem 1rem;
+  padding: 12px 16px;
   border: none;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
+  border-radius: var(--radius-button);
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .test-button {
-  background-color: #2a2a4a;
-  color: #ffffff;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .test-button:hover {
-  background-color: #3a3a5a;
+  background-color: var(--bg-tertiary);
 }
 
 .save-button {
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  color: #ffffff;
+  background-color: var(--accent);
+  color: white;
 }
 
 .save-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+  background-color: var(--accent-hover);
+  transform: scale(1.01);
 }
 
+.save-button:active {
+  transform: scale(0.99);
+}
+
+/* ==================== 警告框 ==================== */
+
 .alert {
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
+  margin-top: var(--spacing-component);
+  padding: 12px 16px;
+  border-radius: var(--radius-input);
+  font-size: 13px;
 }
 
 .alert.success {
-  background-color: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: #22c55e;
+  background-color: rgba(52, 199, 89, 0.1);
+  border: 1px solid rgba(52, 199, 89, 0.2);
+  color: var(--success);
 }
 
 .alert.error {
-  background-color: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #ef4444;
+  background-color: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  color: var(--error);
 }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s, transform 0.3s;
+  transition: opacity var(--transition-base) var(--ease-apple),
+              transform var(--transition-base) var(--ease-apple);
 }
 
 .fade-enter-from,
@@ -594,18 +617,20 @@ const features = [
   transform: translateY(-10px);
 }
 
+/* ==================== 订阅状态 ==================== */
+
 .subscription-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: var(--spacing-component);
+  margin-bottom: var(--spacing-component);
 }
 
 .subscription-status {
-  font-size: 0.875rem;
-  color: #9ca3af;
-  margin: 0.25rem 0 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
 }
 
 .subscription-status .pro {
@@ -614,77 +639,85 @@ const features = [
 }
 
 .subscription-status .free {
-  color: #22c55e;
+  color: var(--success);
   font-weight: 600;
 }
 
 .plan-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
+  padding: 8px 16px;
+  border-radius: var(--radius-input);
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .plan-badge.pro {
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-  color: #ffffff;
+  background-color: #7c3aed;
+  color: white;
 }
 
 .plan-badge.free {
-  background-color: rgba(34, 197, 94, 0.2);
-  color: #22c55e;
+  background-color: rgba(52, 199, 89, 0.1);
+  color: var(--success);
 }
 
+/* ==================== 激活区域 ==================== */
+
 .activation-section {
-  padding-top: 1.5rem;
-  border-top: 1px solid #2a2a4a;
+  padding-top: var(--spacing-component);
+  border-top: 1px solid var(--border);
 }
 
 .section-title {
-  font-size: 1rem;
+  font-size: 17px;
   font-weight: 600;
-  color: #ffffff;
-  margin: 0 0 1rem 0;
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-component) 0;
 }
 
 .activate-button {
   width: 100%;
-  padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  padding: 12px 16px;
+  background-color: #7c3aed;
   border: none;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 0.875rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .activate-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+  background-color: #6d28d9;
+  transform: scale(1.01);
+}
+
+.activate-button:active {
+  transform: scale(0.99);
 }
 
 .pro-info {
-  padding-top: 1.5rem;
-  border-top: 1px solid #2a2a4a;
+  padding-top: var(--spacing-component);
+  border-top: 1px solid var(--border);
 }
 
 .pro-feature {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 0.875rem;
-  color: #22c55e;
-  margin-bottom: 0.75rem;
+  gap: 12px;
+  font-size: 15px;
+  color: var(--success);
+  margin-bottom: 12px;
 }
 
 .pro-expiry {
-  font-size: 0.875rem;
-  color: #9ca3af;
+  font-size: 13px;
+  color: var(--text-secondary);
   margin: 0;
 }
+
+/* ==================== 功能对比列表 ==================== */
 
 .features-list {
   display: flex;
@@ -695,8 +728,8 @@ const features = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #2a2a4a;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .feature-item:last-child {
@@ -706,42 +739,44 @@ const features = [
 .feature-info {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .feature-name {
-  font-size: 0.875rem;
-  color: #ffffff;
+  font-size: 15px;
+  color: var(--text-primary);
 }
 
 .feature-badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-small);
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .feature-badge.pro {
-  background-color: rgba(124, 58, 237, 0.2);
+  background-color: rgba(124, 58, 237, 0.1);
   color: #7c3aed;
 }
 
 .feature-availability {
-  font-size: 1rem;
+  font-size: 20px;
 }
 
 .check-icon {
-  color: #22c55e;
+  color: var(--success);
 }
 
 .lock-icon {
-  color: #6b7280;
+  color: var(--text-tertiary);
 }
 
+/* ==================== 定价卡片 ==================== */
+
 .pricing-card {
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.05) 0%, rgba(124, 58, 237, 0.05) 100%);
-  border-color: rgba(0, 212, 255, 0.2);
+  background-color: rgba(0, 122, 255, 0.03);
+  border-color: rgba(0, 122, 255, 0.15);
 }
 
 .pricing-info {
@@ -749,52 +784,53 @@ const features = [
 }
 
 .price {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-component);
 }
 
 .price-amount {
-  font-size: 2.5rem;
+  font-size: 40px;
   font-weight: 700;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent);
 }
 
 .price-period {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 17px;
+  color: var(--text-secondary);
 }
 
 .pricing-features {
   list-style: none;
   padding: 0;
-  margin: 0 0 2rem 0;
+  margin: 0 0 var(--spacing-relaxed) 0;
   text-align: left;
 }
 
 .pricing-features li {
-  padding: 0.5rem 0;
-  font-size: 0.875rem;
-  color: #ffffff;
+  padding: 8px 0;
+  font-size: 15px;
+  color: var(--text-primary);
 }
 
 .upgrade-button {
   width: 100%;
-  padding: 1rem;
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  padding: 14px;
+  background-color: #7c3aed;
   border: none;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 1rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .upgrade-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+  background-color: #6d28d9;
+  transform: scale(1.01);
+}
+
+.upgrade-button:active:not(:disabled) {
+  transform: scale(0.99);
 }
 
 .upgrade-button:disabled {
@@ -802,66 +838,69 @@ const features = [
   cursor: not-allowed;
 }
 
+/* ==================== 关于信息 ==================== */
+
 .about-info {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .about-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.875rem;
+  font-size: 15px;
 }
 
 .about-label {
-  color: #9ca3af;
+  color: var(--text-secondary);
 }
 
 .about-value {
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
-/* ---- 视觉风格预设 ---- */
+/* ==================== 视觉风格预设 ==================== */
+
 .card-desc {
-  font-size: 0.8125rem;
-  color: #6b7280;
-  margin: 0 0 1rem 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-component) 0;
 }
 
 .preset-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  gap: 8px;
 }
 
 .preset-card {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.875rem;
-  background: #0f0f1a;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.5rem;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
   text-align: left;
 }
 
 .preset-card:hover {
-  border-color: #00d4ff;
+  border-color: var(--accent);
 }
 
 .preset-card.active {
-  border-color: #00d4ff;
-  background: rgba(0, 212, 255, 0.05);
+  border-color: var(--accent);
+  background-color: rgba(0, 122, 255, 0.05);
 }
 
 .preset-preview {
   height: 48px;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-small);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -880,21 +919,24 @@ const features = [
 }
 
 .preset-name {
-  font-size: 0.875rem;
+  font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .preset-desc {
-  font-size: 0.75rem;
-  color: #6b7280;
+  font-size: 11px;
+  color: var(--text-tertiary);
   line-height: 1.3;
 }
+
+/* ==================== 响应式 ==================== */
 
 @media (max-width: 1024px) {
   .settings-content {
     grid-template-columns: 1fr;
   }
+
   .preset-grid {
     grid-template-columns: 1fr;
   }

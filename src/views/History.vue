@@ -98,7 +98,7 @@ const handleView = (item: HistoryItem) => {
 <template>
   <div class="history-page">
     <header class="page-header">
-      <h2 class="page-title">历史记录</h2>
+      <h1 class="page-title">历史记录</h1>
       <p class="page-subtitle">查看和管理你的生成历史</p>
     </header>
 
@@ -121,17 +121,17 @@ const handleView = (item: HistoryItem) => {
         <div class="card-content">
           <div class="card-header">
             <span class="status-badge" :class="item.status">
-              {{ item.status === "completed" ? "✅" : "❌" }}
+              {{ item.status === "completed" ? "✓" : "✕" }}
             </span>
             <span class="card-time">{{ formatTime(item.timestamp) }}</span>
           </div>
           <p class="card-description">{{ item.description }}</p>
           <div class="card-actions">
             <button class="action-button primary" @click="handleView(item)">
-              📂 重新生成
+              重新生成
             </button>
             <button class="action-button danger" @click="handleDelete(item.id)">
-              🗑️ 删除
+              删除
             </button>
           </div>
         </div>
@@ -144,14 +144,14 @@ const handleView = (item: HistoryItem) => {
       <h3>还没有生成记录</h3>
       <p>去创作你的第一个动画吧</p>
       <button class="create-button" @click="router.push('/generate')">
-        ✨ 开始创作
+        开始创作
       </button>
     </div>
 
     <!-- 清空按钮 -->
     <div v-if="historyItems.length > 0" class="clear-section">
       <button class="clear-button" @click="handleClearAll">
-        🗑️ 清空所有记录
+        清空所有记录
       </button>
     </div>
   </div>
@@ -159,82 +159,89 @@ const handleView = (item: HistoryItem) => {
 
 <style scoped>
 .history-page {
-  max-width: 1200px;
+  max-width: 1000px;
   margin: 0 auto;
+  padding: var(--spacing-page);
 }
 
+/* ==================== 页面头部 ==================== */
+
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .page-title {
-  font-size: 2rem;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .page-subtitle {
-  font-size: 1rem;
-  color: #9ca3af;
+  font-size: 15px;
+  color: var(--text-secondary);
   margin: 0;
 }
 
+/* ==================== 筛选标签 ==================== */
+
 .filter-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
+  gap: 8px;
+  margin-bottom: var(--spacing-relaxed);
 }
 
 .filter-tab {
-  padding: 0.625rem 1.25rem;
-  background-color: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 2rem;
-  color: #9ca3af;
-  font-size: 0.875rem;
+  padding: 8px 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .filter-tab:hover {
-  background-color: #2a2a4a;
-  color: #ffffff;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .filter-tab.active {
-  background-color: #00d4ff;
-  border-color: #00d4ff;
-  color: #0f0f1a;
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
+
+/* ==================== 历史记录网格 ==================== */
 
 .history-grid {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--spacing-component);
 }
 
 .history-card {
-  background-color: #1a1a2e;
-  border: 1px solid #2a2a4a;
-  border-radius: 0.75rem;
-  padding: 1rem;
-  transition: border-color 0.2s;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-card);
+  transition: all var(--transition-base) var(--ease-apple);
+  box-shadow: var(--shadow-card);
 }
 
 .history-card:hover {
-  border-color: #00d4ff;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-elevated);
 }
 
 .card-content {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .card-header {
@@ -243,119 +250,144 @@ const handleView = (item: HistoryItem) => {
   justify-content: space-between;
 }
 
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .status-badge.completed {
-  font-size: 1rem;
+  background-color: rgba(52, 199, 89, 0.1);
+  color: var(--success);
 }
 
 .status-badge.failed {
-  font-size: 1rem;
+  background-color: rgba(255, 59, 48, 0.1);
+  color: var(--error);
 }
 
 .card-time {
-  font-size: 0.75rem;
-  color: #6b7280;
+  font-size: 13px;
+  color: var(--text-tertiary);
 }
 
 .card-description {
-  font-size: 0.875rem;
-  color: #e5e7eb;
+  font-size: 15px;
+  color: var(--text-primary);
   margin: 0;
   line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .card-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .action-button {
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-size: 0.8rem;
+  padding: 8px 16px;
+  border-radius: var(--radius-input);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .action-button.primary {
-  background-color: #00d4ff;
-  border: 1px solid #00d4ff;
-  color: #0f0f1a;
+  background-color: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
 }
 
 .action-button.primary:hover {
-  background-color: #00b8e6;
+  background-color: var(--accent-hover);
 }
 
 .action-button.danger {
   background-color: transparent;
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--error);
+  border: 1px solid rgba(255, 59, 48, 0.3);
 }
 
 .action-button.danger:hover {
-  background-color: rgba(239, 68, 68, 0.1);
+  background-color: rgba(255, 59, 48, 0.08);
 }
+
+/* ==================== 空状态 ==================== */
 
 .empty-state {
   text-align: center;
-  padding: 4rem 2rem;
+  padding: 80px 20px;
 }
 
 .empty-icon {
-  font-size: 5rem;
+  font-size: 64px;
   display: block;
-  margin-bottom: 1rem;
+  margin-bottom: 16px;
 }
 
 .empty-state h3 {
-  font-size: 1.5rem;
+  font-size: 22px;
   font-weight: 600;
-  color: #ffffff;
-  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
 }
 
 .empty-state p {
-  font-size: 1rem;
-  color: #9ca3af;
-  margin: 0 0 2rem 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin: 0 0 32px 0;
 }
 
 .create-button {
-  padding: 0.875rem 2rem;
-  background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+  padding: 12px 32px;
+  background-color: var(--accent);
   border: none;
-  border-radius: 0.5rem;
-  color: #ffffff;
-  font-size: 1rem;
+  border-radius: var(--radius-button);
+  color: white;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .create-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.3);
+  background-color: var(--accent-hover);
+  transform: scale(1.02);
 }
 
+.create-button:active {
+  transform: scale(0.98);
+}
+
+/* ==================== 清空按钮 ==================== */
+
 .clear-section {
-  margin-top: 2rem;
+  margin-top: var(--spacing-relaxed);
   text-align: center;
 }
 
 .clear-button {
-  padding: 0.75rem 1.5rem;
+  padding: 10px 20px;
   background-color: transparent;
-  border: 1px solid #ef4444;
-  border-radius: 0.5rem;
-  color: #ef4444;
-  font-size: 0.875rem;
+  border: 1px solid var(--error);
+  border-radius: var(--radius-input);
+  color: var(--error);
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--transition-base) var(--ease-apple);
 }
 
 .clear-button:hover {
-  background-color: rgba(239, 68, 68, 0.1);
+  background-color: rgba(255, 59, 48, 0.08);
 }
 </style>
