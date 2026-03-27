@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
 import { useRoute } from "vue-router";
+import { runMigration } from "./services/migration";
 
 const route = useRoute();
 
@@ -15,6 +17,21 @@ const isActive = (path: string) => {
   if (path === "/") return route.path === "/";
   return route.path.startsWith(path);
 };
+
+// Initialize app: run migration from localStorage to SQLite
+onMounted(async () => {
+  try {
+    const result = await runMigration();
+    if (result.migrated > 0) {
+      console.log(`Migration completed: ${result.migrated} jobs migrated to SQLite`);
+    }
+    if (result.failed > 0) {
+      console.warn(`Migration warning: ${result.failed} jobs failed to migrate`);
+    }
+  } catch (error) {
+    console.error('Migration error:', error);
+  }
+});
 </script>
 
 <template>

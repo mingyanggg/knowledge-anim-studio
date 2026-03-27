@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useTemplateStore } from "../stores/templateStore";
+import { getCases, getNarrationStyleById, getVisualStyleById, type Case } from "../services/caseService";
 
 const router = useRouter();
 const templateStore = useTemplateStore();
@@ -9,6 +10,10 @@ const templateStore = useTemplateStore();
 const searchQuery = ref("");
 const selectedCategory = ref("全部");
 const categories = ["全部", "数学", "物理", "化学"];
+
+// 案例数据
+const cases = ref<Case[]>([]);
+const casesLoading = ref(true);
 
 // 按分类过滤 + 搜索
 const filteredTemplates = computed(() => {
@@ -32,6 +37,34 @@ const goToGenerate = (templateId?: string) => {
   const query = templateId ? `?template=${templateId}` : "";
   router.push(`/generate${query}`);
 };
+
+// 使用案例创建生成
+const useCase = (caseItem: Case) => {
+  const desc = caseItem.prompt || caseItem.description || "";
+  const style = caseItem.narration_style || "";
+  router.push(`/generate?desc=${encodeURIComponent(desc)}&style=${style}`);
+};
+
+// 获取解说风格信息
+const getNarrationInfo = (styleId: string) => {
+  return getNarrationStyleById(styleId);
+};
+
+// 获取视觉风格信息
+const getVisualInfo = (styleId: string) => {
+  return getVisualStyleById(styleId);
+};
+
+// 加载案例
+onMounted(async () => {
+  try {
+    cases.value = await getCases();
+  } catch (error) {
+    console.error('Failed to load cases:', error);
+  } finally {
+    casesLoading.value = false;
+  }
+});
 
 // 首页核心卖点
 const features = [
@@ -129,6 +162,57 @@ const features = [
       <div v-if="filteredTemplates.length === 0" class="empty-state">
         <span>🔍</span>
         <p>没有找到匹配的模板</p>
+      </div>
+    </section>
+
+    <!-- ====== 灵感案例 ====== -->
+    <section class="cases-section">
+      <header class="section-header">
+        <h2 class="section-title">灵感案例</h2>
+        <p class="section-subtitle">浏览精选案例，获取创作灵感</p>
+      </header>
+
+      <!-- 案例网格 -->
+      <div v-if="casesLoading" class="loading-cases">
+        <div class="spinner" />
+        <p>加载案例中...</p>
+      </div>
+
+      <div v-else class="case-grid">
+        <div
+          v-for="caseItem in cases"
+          :key="caseItem.id"
+          class="case-card"
+          @click="useCase(caseItem)"
+        >
+          <!-- 解说风格标签 -->
+          <div class="case-badge">
+            <span v-if="caseItem.narration_style">
+              {{ getNarrationInfo(caseItem.narration_style)?.icon || '💡' }}
+              {{ getNarrationInfo(caseItem.narration_style)?.name || '默认风格' }}
+            </span>
+          </div>
+
+          <!-- 案例内容 -->
+          <div class="case-content">
+            <h3 class="case-title">{{ caseItem.title }}</h3>
+            <p class="case-desc">{{ caseItem.description }}</p>
+          </div>
+
+          <!-- 视觉风格标签 -->
+          <div class="case-meta">
+            <span v-if="caseItem.visual_style" class="meta-tag">
+              {{ getVisualInfo(caseItem.visual_style)?.icon || '🎨' }}
+              {{ getVisualInfo(caseItem.visual_style)?.name || '默认视觉' }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空状态 -->
+      <div v-if="!casesLoading && cases.length === 0" class="empty-state">
+        <span>📦</span>
+        <p>暂无案例</p>
       </div>
     </section>
   </div>
@@ -422,6 +506,108 @@ const features = [
   margin-bottom: 16px;
 }
 
+/* ==================== 案例区域 ==================== */
+
+.cases-section {
+  padding-top: var(--spacing-relaxed);
+}
+
+.case-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--spacing-component);
+}
+
+.case-card {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.case-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--accent);
+}
+
+.case-badge {
+  align-self: flex-start;
+}
+
+.case-badge span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--accent);
+  color: white;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.case-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.case-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.case-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.case-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.case-meta .meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-small);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.loading-cases {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-component);
+  padding: 64px 20px;
+  color: var(--text-secondary);
+}
+
 /* ==================== 响应式 ==================== */
 
 @media (max-width: 900px) {
@@ -432,6 +618,10 @@ const features = [
   .hero-title {
     font-size: 36px;
   }
+
+  .case-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
@@ -441,6 +631,10 @@ const features = [
 
   .hero-title {
     font-size: 28px;
+  }
+
+  .case-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

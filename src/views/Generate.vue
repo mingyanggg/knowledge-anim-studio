@@ -9,6 +9,7 @@ import { stylePresets, type StylePreset } from "../data/style-presets";
 import { exportScriptFile } from "../services/ai-generator";
 import * as jobManager from "../services/job-manager";
 import type { UsageResult } from "../services/ai-generator";
+import { getRecommendedCases, getNarrationStyleById, type Case } from "../services/caseService";
 
 // 导出反馈
 const exportMsg = ref("");
@@ -95,6 +96,10 @@ const usageText = computed(() => {
   return `${usage.planName} · 本月已用 ${usage.usedThisMonth}/${max} 次`;
 });
 
+// 参考案例
+const recommendedCases = ref<Case[]>([]);
+const showCases = ref(false);
+
 // 错误提示
 const showError = ref(false);
 const errorMessage = ref("");
@@ -139,6 +144,13 @@ onMounted(async () => {
 
   // 获取用量信息
   await generateStore.fetchUsage();
+
+  // 加载推荐案例
+  try {
+    recommendedCases.value = await getRecommendedCases(4);
+  } catch (error) {
+    console.error('Failed to load recommended cases:', error);
+  }
 });
 
 watch(selectedTemplateId, () => {
@@ -224,6 +236,22 @@ async function handleExportScript() {
   }
   if (exportMsgTimer) clearTimeout(exportMsgTimer);
   exportMsgTimer = setTimeout(() => { exportMsg.value = ""; }, 3000);
+}
+
+/** 使用参考案例 */
+function useCase(caseItem: Case) {
+  description.value = caseItem.prompt || caseItem.description || "";
+
+  // 如果案例有解说风格，自动选择
+  if (caseItem.narration_style) {
+    const styleInfo = getNarrationStyleById(caseItem.narration_style);
+    if (styleInfo) {
+      selectedNarrationStyle.value = styleInfo as any;
+    }
+  }
+
+  // 滚动到顶部
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 </script>
 
@@ -451,6 +479,41 @@ async function handleExportScript() {
 
         <div v-if="generateStore.error && !showError" class="error-message">
           {{ generateStore.error }}
+        </div>
+
+        <!-- 参考案例面板 -->
+        <div v-if="recommendedCases.length > 0" class="reference-cases">
+          <div class="reference-header">
+            <h3 class="reference-title">参考案例</h3>
+            <button class="toggle-cases-btn" @click="showCases = !showCases">
+              {{ showCases ? '收起' : '展开' }}
+              <span class="toggle-icon" :class="{ open: showCases }">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </button>
+          </div>
+
+          <Transition name="slide-down">
+            <div v-if="showCases" class="reference-list">
+              <div
+                v-for="caseItem in recommendedCases"
+                :key="caseItem.id"
+                class="reference-item"
+                @click="useCase(caseItem)"
+              >
+                <div class="reference-icon">
+                  {{ getNarrationStyleById(caseItem.narration_style || '')?.icon || '💡' }}
+                </div>
+                <div class="reference-info">
+                  <span class="reference-name">{{ caseItem.title }}</span>
+                  <span class="reference-desc">{{ caseItem.description }}</span>
+                </div>
+                <span class="reference-arrow">→</span>
+              </div>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -1124,6 +1187,137 @@ async function handleExportScript() {
   color: var(--success);
   font-size: 13px;
   text-align: center;
+}
+
+/* ==================== 参考案例面板 ==================== */
+
+.reference-cases {
+  margin-top: var(--spacing-component);
+  padding: var(--spacing-card);
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.reference-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-component);
+}
+
+.reference-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.toggle-cases-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.toggle-cases-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.toggle-icon {
+  transition: transform var(--transition-base) var(--ease-apple);
+}
+
+.toggle-icon.open {
+  transform: rotate(180deg);
+}
+
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reference-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.reference-item:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent);
+  transform: translateX(4px);
+}
+
+.reference-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.reference-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reference-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+}
+
+.reference-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.reference-arrow {
+  font-size: 18px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-base) var(--ease-apple);
+}
+
+.reference-item:hover .reference-arrow {
+  color: var(--accent);
+}
+
+/* Slide down animation */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all var(--transition-base) var(--ease-apple);
+  overflow: hidden;
+  max-height: 500px;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
 }
 
 /* ==================== 响应式 ==================== */

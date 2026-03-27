@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import { useSettingsStore } from "../stores/settingsStore";
 import { useSubscriptionStore } from "../stores/subscriptionStore";
 import { stylePresets } from "../data/style-presets";
@@ -29,7 +29,31 @@ const activationCode = ref("");
 const showTestResult = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
 
+// API 连接状态
+const apiStatus = ref<'checking' | 'connected' | 'disconnected'>('checking');
+
 const isPro = computed(() => subscriptionStore.isPro);
+const currentPlan = computed(() => {
+  const state = subscriptionStore.state;
+  if (!state.plan || state.plan === 'free') return '免费版';
+  if (state.plan === 'basic') return '基础版';
+  if (state.plan === 'pro') return '专业版';
+  if (state.plan === 'premium') return '旗舰版';
+  return '免费版';
+});
+
+// 使用量信息
+const usagePercent = computed(() => {
+  const state = subscriptionStore.state;
+  if (!state.usageLimit || state.usageLimit === -1) return 0;
+  return Math.min((state.usageCount / state.usageLimit) * 100, 100);
+});
+
+const usageText = computed(() => {
+  const state = subscriptionStore.state;
+  if (!state.usageLimit || state.usageLimit === -1) return '不限';
+  return `${state.usageCount} / ${state.usageLimit}`;
+});
 
 // 导出设置变更时自动持久化
 watch([exportFormat, resolution, fps], () => {
@@ -50,8 +74,36 @@ if (s.theme) theme.value = s.theme;
 apiProvider.value = s.apiProvider;
 apiKey.value = s.apiKey;
 
+// 检查 API 连接状态
+onMounted(async () => {
+  try {
+    // 尝试调用后端健康检查
+    const response = await fetch('http://localhost:8000/api/health');
+    if (response.ok) {
+      apiStatus.value = 'connected';
+    } else {
+      apiStatus.value = 'disconnected';
+    }
+  } catch {
+    // 后端未启动，使用离线模式
+    apiStatus.value = 'disconnected';
+  }
+});
+
 const handleTestConnection = async () => {
-  testResult.value = { success: true, message: "连接成功！" };
+  try {
+    const response = await fetch('http://localhost:8000/api/health');
+    if (response.ok) {
+      testResult.value = { success: true, message: "连接成功！" };
+      apiStatus.value = 'connected';
+    } else {
+      testResult.value = { success: false, message: "连接失败" };
+      apiStatus.value = 'disconnected';
+    }
+  } catch {
+    testResult.value = { success: false, message: "无法连接到后端服务" };
+    apiStatus.value = 'disconnected';
+  }
   showTestResult.value = true;
   setTimeout(() => {
     showTestResult.value = false;
@@ -102,6 +154,14 @@ const features = [
   { name: "MP4/WEBM 导出", available: true, pro: true },
   { name: "批量渲染", available: true, pro: true },
   { name: "优先渲染", available: true, pro: true },
+];
+
+// 套餐价格信息
+const plans = [
+  { name: '免费版', price: '¥0', period: '永久', features: ['10次/月生成', 'GIF导出', '720p分辨率'] },
+  { name: '基础版', price: '¥29', period: '月', features: ['50次/月生成', 'MP4导出', '1080p分辨率', '优先支持'] },
+  { name: '专业版', price: '¥59', period: '月', features: ['无限生成', '4K分辨率', '批量渲染', '所有功能'] },
+  { name: '旗舰版', price: '¥199', period: '年', features: ['永久授权', '所有功能', '专属客服', '未来更新'] },
 ];
 </script>
 
@@ -278,11 +338,22 @@ const features = [
             <div>
               <h2 class="card-title">订阅状态</h2>
               <p class="subscription-status">
-                当前: <span :class="isPro ? 'pro' : 'free'">{{ isPro ? 'Pro 版本' : '免费版本' }}</span>
+                当前: <span :class="isPro ? 'pro' : 'free'">{{ currentPlan }}</span>
               </p>
             </div>
             <div class="plan-badge" :class="isPro ? 'pro' : 'free'">
-              {{ isPro ? 'PRO' : 'FREE' }}
+              {{ currentPlan }}
+            </div>
+          </div>
+
+          <!-- 使用量显示 -->
+          <div class="usage-section">
+            <div class="usage-header">
+              <span class="usage-label">本月使用量</span>
+              <span class="usage-value">{{ usageText }} 次</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" :style="{ width: usagePercent + '%' }" />
             </div>
           </div>
 
@@ -311,6 +382,27 @@ const features = [
               有效期至: {{ subscriptionStore.state.expiryDate || '永久' }}
             </p>
           </div>
+        </div>
+
+        <!-- API 连接状态 -->
+        <div class="card">
+          <h2 class="card-title">后端连接</h2>
+
+          <div class="api-status">
+            <div class="status-indicator" :class="apiStatus">
+              <span class="status-dot"></span>
+              <span class="status-text">
+                {{ apiStatus === 'checking' ? '检查中...' : apiStatus === 'connected' ? '已连接' : '未连接' }}
+              </span>
+            </div>
+            <p class="status-desc">
+              {{ apiStatus === 'connected' ? '后端服务运行正常' : '无法连接到后端服务，某些功能可能受限' }}
+            </p>
+          </div>
+
+          <button class="test-button" @click="handleTestConnection">
+            重新检查
+          </button>
         </div>
       </div>
 
@@ -341,29 +433,37 @@ const features = [
 
         <!-- Pricing Card -->
         <div class="card pricing-card">
-          <h2 class="card-title">升级到 Pro</h2>
+          <h2 class="card-title">套餐选择</h2>
 
-          <div class="pricing-info">
-            <div class="price">
-              <span class="price-amount">¥99</span>
-              <span class="price-period">/永久</span>
-            </div>
-
-            <ul class="pricing-features">
-              <li>✓ 解锁所有 Pro 功能</li>
-              <li>✓ 4K 超高清渲染</li>
-              <li>✓ MP4 视频导出</li>
-              <li>✓ 优先技术支持</li>
-              <li>✓ 未来功能抢先体验</li>
-            </ul>
-
-            <button
-              class="upgrade-button"
-              :disabled="isPro"
-              @click="isPro ? null : (activationCode = '')"
+          <div class="pricing-grid">
+            <div
+              v-for="plan in plans"
+              :key="plan.name"
+              class="plan-item"
+              :class="{ active: currentPlan === plan.name, featured: plan.name === '专业版' }"
             >
-              {{ isPro ? '已是 Pro 用户' : '立即升级' }}
-            </button>
+              <div class="plan-header">
+                <span class="plan-name">{{ plan.name }}</span>
+                <div v-if="plan.name === '专业版'" class="plan-tag">推荐</div>
+              </div>
+              <div class="plan-price">
+                <span class="price-amount">{{ plan.price }}</span>
+                <span class="price-period">/{{ plan.period }}</span>
+              </div>
+              <ul class="plan-features">
+                <li v-for="feature in plan.features" :key="feature">
+                  <span class="feature-check">✓</span>
+                  {{ feature }}
+                </li>
+              </ul>
+              <button
+                class="plan-button"
+                :class="{ primary: plan.name === '专业版' }"
+                :disabled="currentPlan === plan.name"
+              >
+                {{ currentPlan === plan.name ? '当前套餐' : '选择套餐' }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -373,6 +473,10 @@ const features = [
 
           <div class="about-info">
             <div class="about-item">
+              <span class="about-label">应用名称</span>
+              <span class="about-value">Knowledge Anim Studio</span>
+            </div>
+            <div class="about-item">
               <span class="about-label">版本</span>
               <span class="about-value">0.2.0</span>
             </div>
@@ -380,6 +484,17 @@ const features = [
               <span class="about-label">描述</span>
               <span class="about-value">AI 驱动的知识动画创作工具</span>
             </div>
+          </div>
+
+          <div class="about-links">
+            <a href="https://github.com/yourusername/knowledge-anim-studio" target="_blank" class="about-link">
+              <span>📦</span>
+              <span>GitHub 仓库</span>
+            </a>
+            <a href="https://github.com/yourusername/knowledge-anim-studio/issues" target="_blank" class="about-link">
+              <span>🐛</span>
+              <span>问题反馈</span>
+            </a>
           </div>
         </div>
       </div>
@@ -659,6 +774,264 @@ const features = [
 .plan-badge.free {
   background-color: rgba(52, 199, 89, 0.1);
   color: var(--success);
+}
+
+/* ==================== 使用量显示 ==================== */
+
+.usage-section {
+  padding: var(--spacing-component) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--spacing-component);
+}
+
+.usage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.usage-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.usage-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.usage-section .progress-bar {
+  height: 6px;
+  background-color: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.usage-section .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #7c3aed);
+  border-radius: 3px;
+  transition: width var(--transition-base) var(--ease-apple);
+}
+
+/* ==================== API 连接状态 ==================== */
+
+.api-status {
+  padding: var(--spacing-component) 0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-input);
+  margin-bottom: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-indicator.checking .status-dot {
+  background-color: var(--warning);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-indicator.connected .status-dot {
+  background-color: var(--success);
+}
+
+.status-indicator.disconnected .status-dot {
+  background-color: var(--error);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.status-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-component) 0;
+  padding-left: 20px;
+}
+
+/* ==================== 套餐选择 ==================== */
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.plan-item {
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.plan-item:hover {
+  border-color: var(--accent);
+}
+
+.plan-item.featured {
+  border-color: #7c3aed;
+  background-color: rgba(124, 58, 237, 0.05);
+}
+
+.plan-item.active {
+  border-color: var(--success);
+  background-color: rgba(52, 199, 89, 0.05);
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.plan-tag {
+  padding: 4px 8px;
+  background-color: #7c3aed;
+  color: white;
+  border-radius: var(--radius-small);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.plan-item .price-amount {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.plan-item.featured .price-amount {
+  color: #7c3aed;
+}
+
+.plan-item .price-period {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plan-features li {
+  font-size: 12px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feature-check {
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+.plan-button {
+  width: 100%;
+  padding: 10px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.plan-button:hover:not(:disabled) {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  transform: scale(1.01);
+}
+
+.plan-button.primary {
+  background-color: #7c3aed;
+  border-color: #7c3aed;
+  color: white;
+}
+
+.plan-button.primary:hover:not(:disabled) {
+  background-color: #6d28d9;
+  border-color: #6d28d9;
+}
+
+.plan-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== 关于链接 ==================== */
+
+.about-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: var(--spacing-component);
+}
+
+.about-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  text-decoration: none;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.about-link:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent);
+  transform: translateX(4px);
 }
 
 /* ==================== 激活区域 ==================== */
