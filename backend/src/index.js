@@ -145,12 +145,12 @@ async function handleGenerate(request, env) {
   const modelConfig = getModelConfig(env);
   const apiKey = modelConfig.getKey(env);
   if (!apiKey) {
-    return jsonResponse({ error: `服务器未配置 ${modelConfig.name} API Key` }, 500);
+    return jsonResponse({ error: '服务暂时不可用，请稍后再试' }, 503);
   }
 
   const aiResponse = await callAI(modelConfig, apiKey, systemPrompt, userPrompt);
   if (!aiResponse.success) {
-    return jsonResponse({ error: 'AI 生成失败', detail: aiResponse.error }, 502);
+    return jsonResponse({ error: '生成失败，请检查输入内容或稍后再试' }, 502);
   }
 
   // 6. 更新用量

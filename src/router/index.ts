@@ -4,18 +4,17 @@ import type { RouteRecordRaw } from "vue-router";
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    name: "home",
-    component: () => import("../views/Home.vue"),
+    redirect: "/create",
   },
   {
-    path: "/generate",
-    name: "generate",
-    component: () => import("../views/Generate.vue"),
+    path: "/create",
+    name: "create",
+    component: () => import("../views/Create.vue"),
   },
   {
-    path: "/render",
-    name: "render",
-    component: () => import("../views/Render.vue"),
+    path: "/inspiration",
+    name: "inspiration",
+    component: () => import("../views/Inspiration.vue"),
   },
   {
     path: "/history",
@@ -26,11 +25,6 @@ const routes: RouteRecordRaw[] = [
     path: "/settings",
     name: "settings",
     component: () => import("../views/Settings.vue"),
-  },
-  {
-    path: "/templates",
-    name: "templates",
-    component: () => import("../views/TemplateEditor.vue"),
   },
 ];
 

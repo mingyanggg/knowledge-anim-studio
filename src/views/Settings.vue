@@ -22,14 +22,12 @@ const resolution = ref<"720p" | "1080p" | "4k">("1080p");
 const fps = ref<30 | 60>(30);
 const theme = ref<"dark" | "light">("dark");
 
-// API 设置
-const apiProvider = ref<"deepseek" | "openai">("deepseek");
-const apiKey = ref("");
+// 订阅设置
 const activationCode = ref("");
 const showTestResult = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
 
-// API 连接状态
+// API 连接状态（用于显示服务状态）
 const apiStatus = ref<'checking' | 'connected' | 'disconnected'>('checking');
 
 const isPro = computed(() => subscriptionStore.isPro);
@@ -71,49 +69,24 @@ if (s.exportFormat) exportFormat.value = s.exportFormat as "gif" | "mp4" | "webm
 if (s.resolution) resolution.value = s.resolution as "720p" | "1080p" | "4k";
 if (s.fps) fps.value = s.fps as 30 | 60;
 if (s.theme) theme.value = s.theme;
-apiProvider.value = s.apiProvider;
-apiKey.value = s.apiKey;
 
 // 检查 API 连接状态
 onMounted(async () => {
   try {
-    // 尝试调用后端健康检查
-    const response = await fetch('http://localhost:8000/api/health');
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8787';
+    const response = await fetch(`${apiUrl}/api/health`);
     if (response.ok) {
       apiStatus.value = 'connected';
     } else {
       apiStatus.value = 'disconnected';
     }
   } catch {
-    // 后端未启动，使用离线模式
     apiStatus.value = 'disconnected';
   }
 });
 
-const handleTestConnection = async () => {
-  try {
-    const response = await fetch('http://localhost:8000/api/health');
-    if (response.ok) {
-      testResult.value = { success: true, message: "连接成功！" };
-      apiStatus.value = 'connected';
-    } else {
-      testResult.value = { success: false, message: "连接失败" };
-      apiStatus.value = 'disconnected';
-    }
-  } catch {
-    testResult.value = { success: false, message: "无法连接到后端服务" };
-    apiStatus.value = 'disconnected';
-  }
-  showTestResult.value = true;
-  setTimeout(() => {
-    showTestResult.value = false;
-  }, 3000);
-};
-
 const handleSaveSettings = () => {
   settingsStore.updateSettings({
-    apiProvider: apiProvider.value,
-    apiKey: apiKey.value,
     exportFormat: exportFormat.value,
     resolution: resolution.value,
     fps: fps.value,
@@ -272,66 +245,6 @@ const plans = [
           </div>
         </div>
 
-        <!-- API Settings Card -->
-        <div class="card">
-          <h2 class="card-title">API 配置</h2>
-
-          <div class="form-group">
-            <label class="form-label">AI 服务提供商</label>
-            <div class="provider-options">
-              <button
-                class="provider-option"
-                :class="{ active: apiProvider === 'deepseek' }"
-                @click="apiProvider = 'deepseek'"
-              >
-                <span class="provider-icon">🤖</span>
-                <span>DeepSeek</span>
-              </button>
-              <button
-                class="provider-option"
-                :class="{ active: apiProvider === 'openai' }"
-                @click="apiProvider = 'openai'"
-              >
-                <span class="provider-icon">🧠</span>
-                <span>OpenAI</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">API Key</label>
-            <input
-              v-model="apiKey"
-              type="password"
-              class="form-input"
-              placeholder="sk-..."
-            />
-            <p class="form-hint">
-              您的 API Key 将安全存储在本地
-            </p>
-          </div>
-
-          <div class="form-actions">
-            <button class="test-button" @click="handleTestConnection">
-              测试连接
-            </button>
-            <button class="save-button" @click="handleSaveSettings">
-              保存设置
-            </button>
-          </div>
-
-          <!-- Test Result Alert -->
-          <transition name="fade">
-            <div
-              v-if="showTestResult && testResult"
-              class="alert"
-              :class="testResult.success ? 'success' : 'error'"
-            >
-              {{ testResult.success ? '✓' : '✕' }} {{ testResult.message }}
-            </div>
-          </transition>
-        </div>
-
         <!-- Subscription Card -->
         <div class="card">
           <div class="subscription-header">
@@ -382,27 +295,6 @@ const plans = [
               有效期至: {{ subscriptionStore.state.expiryDate || '永久' }}
             </p>
           </div>
-        </div>
-
-        <!-- API 连接状态 -->
-        <div class="card">
-          <h2 class="card-title">后端连接</h2>
-
-          <div class="api-status">
-            <div class="status-indicator" :class="apiStatus">
-              <span class="status-dot"></span>
-              <span class="status-text">
-                {{ apiStatus === 'checking' ? '检查中...' : apiStatus === 'connected' ? '已连接' : '未连接' }}
-              </span>
-            </div>
-            <p class="status-desc">
-              {{ apiStatus === 'connected' ? '后端服务运行正常' : '无法连接到后端服务，某些功能可能受限' }}
-            </p>
-          </div>
-
-          <button class="test-button" @click="handleTestConnection">
-            重新检查
-          </button>
         </div>
       </div>
 
