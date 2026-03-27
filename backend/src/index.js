@@ -1,11 +1,10 @@
 /**
  * Knowledge Anim Studio — Cloudflare Workers 后端代理
  * 
- * 功能：
- * 1. 代理 Gemini API 调用（API Key 不暴露给客户端）
- * 2. 用户用量统计（KV 存储）
- * 3. 订阅配额检查
- * 4. 风控（频率限制）
+ * 支持 AI 模型：DeepSeek（默认）、Gemini（后期）
+ * API Key 安全存储在服务端，客户端不可见
+ * 
+ * 功能：代理 AI 调用、用量统计、订阅配额、风控
  */
 
 export default {
@@ -13,26 +12,17 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // CORS 预检
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders() });
     }
 
     try {
-      // 路由
-      if (path === '/api/generate' && request.method === 'POST') {
-        return handleGenerate(request, env);
-      }
-      if (path === '/api/usage' && request.method === 'GET') {
-        return handleGetUsage(request, env);
-      }
-      if (path === '/api/subscription' && request.method === 'GET') {
-        return handleGetSubscription(request, env);
-      }
+      if (path === '/api/generate' && request.method === 'POST') return handleGenerate(request, env);
+      if (path === '/api/usage' && request.method === 'GET') return handleGetUsage(request, env);
+      if (path === '/api/subscription' && request.method === 'GET') return handleGetSubscription(request, env);
       if (path === '/api/health' && request.method === 'GET') {
-        return jsonResponse({ status: 'ok', time: new Date().toISOString() });
+        return jsonResponse({ status: 'ok', time: new Date().toISOString(), model: getModelName(env) });
       }
-
       return jsonResponse({ error: 'Not found' }, 404);
     } catch (err) {
       return jsonResponse({ error: err.message }, 500);
@@ -45,8 +35,49 @@ const SUBSCRIPTION_PLANS = {
   free:     { name: '免费版', maxPerMonth: 3,   price: 0 },
   basic:    { name: '基础版', maxPerMonth: 50,  price: 29 },
   pro:      { name: '专业版', maxPerMonth: 150, price: 59 },
-  ultimate: { name: '旗舰版', maxPerMonth: -1,  price: 199 }, // -1 = 不限
+  ultimate: { name: '旗舰版', maxPerMonth: -1,  price: 199 },
 };
+
+// ========== AI 模型配置 ==========
+const AI_MODELS = {
+  deepseek: {
+    name: 'DeepSeek V3',
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    getKey: (env) => env.DEEPSEEK_API_KEY,
+    buildBody: (systemPrompt, userPrompt) => JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 8192,
+    }),
+    parseResponse: (data) => data.choices?.[0]?.message?.content || '',
+  },
+  gemini: {
+    name: 'Gemini 2.5 Flash',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent',
+    model: 'gemini-2.5-flash',
+    getKey: (env) => env.GEMINI_API_KEY,
+    buildBody: (systemPrompt, userPrompt) => JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+    }),
+    parseResponse: (data) => data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+  },
+};
+
+function getModelConfig(env) {
+  const model = env.AI_MODEL || 'deepseek';
+  return AI_MODELS[model] || AI_MODELS.deepseek;
+}
+
+function getModelName(env) {
+  return getModelConfig(env).name;
+}
 
 // ========== 生成动画脚本 ==========
 async function handleGenerate(request, env) {
@@ -57,15 +88,13 @@ async function handleGenerate(request, env) {
     return jsonResponse({ error: '缺少 user_id 或 description' }, 400);
   }
 
-  // 1. 获取用户订阅信息
+  // 1. 获取用户数据
   const userKey = `user:${user_id}`;
   const userData = await env.USAGE_KV.get(userKey, 'json') || {
-    plan: 'free',
-    usedThisMonth: 0,
-    monthKey: getMonthKey(),
+    plan: 'free', usedThisMonth: 0, monthKey: getMonthKey(),
   };
 
-  // 2. 检查月份是否跨月，跨月则重置用量
+  // 2. 跨月重置
   const currentMonth = getMonthKey();
   if (userData.monthKey !== currentMonth) {
     userData.usedThisMonth = 0;
@@ -77,23 +106,21 @@ async function handleGenerate(request, env) {
   if (plan.maxPerMonth !== -1 && userData.usedThisMonth >= plan.maxPerMonth) {
     return jsonResponse({
       error: '本月配额已用完',
-      plan: userData.plan,
-      used: userData.usedThisMonth,
-      max: plan.maxPerMonth,
+      plan: userData.plan, used: userData.usedThisMonth, max: plan.maxPerMonth,
     }, 429);
   }
 
-  // 4. 构建 Gemini Prompt
+  // 4. 构建 Prompt
   const stylePrompts = {
-    classroom: '用教师课堂讲解的口吻，循序渐进，重点用文字标注强调，适合教学场景',
-    'popular-science': '用通俗易懂的大白话，生动有趣的比喻，面向大众科普',
-    academic: '用学术严谨的表达，包含公式推导和逻辑链条，适合学术场合',
-    'fun-animation': '用轻松幽默的方式，加入生活化类比和趣味元素，吸引眼球',
-    'minimal-tech': '用简洁精准的表达，极简叙事风格，科技感强',
-    storytelling: '用讲故事的方式，有起承转合，从生活场景切入知识概念',
+    classroom: '用教师课堂讲解的口吻，循序渐进，重点用文字标注强调，适合教学场景。在动画中每个关键步骤都要有清晰的中文标注。',
+    'popular-science': '用通俗易懂的大白话，生动有趣的比喻，面向大众科普。用生活中的例子来解释抽象概念。',
+    academic: '用学术严谨的表达，包含公式推导和逻辑链条，适合学术场合。注重精确性和完整性。',
+    'fun-animation': '用轻松幽默的方式，加入生活化类比和趣味元素，吸引眼球。可以用搞笑的比喻。',
+    'minimal-tech': '用简洁精准的表达，极简叙事风格，科技感强。少即是多，信息密度高。',
+    storytelling: '用讲故事的方式，有起承转合，从生活场景切入知识概念。像纪录片一样娓娓道来。',
   };
 
-  const systemPrompt = `你是一个专业的 Manim 动画脚本编写专家。用户会给你一个知识点描述，你需要生成完整的 Manim Python 脚本。
+  const systemPrompt = `你是一个专业的 Manim（Python 动画引擎）脚本编写专家。用户会给你一个知识点描述，你需要生成完整的、可直接运行的 Manim Python 脚本。
 
 解说风格要求：${stylePrompts[narration_style] || stylePrompts.classroom}
 视觉风格：主色 ${visual_style?.primary || '#007aff'}，辅色 ${visual_style?.secondary || '#5856d6'}
@@ -102,78 +129,114 @@ async function handleGenerate(request, env) {
 
 要求：
 1. 生成完整的可运行 Manim Python 脚本
-2. 脚本必须包含 class Scene(Scene) 和 construct 方法
-3. 动画要有节奏感，不要太快或太慢
-4. 用中文文字标注（Text 对象）解释每个步骤
-5. 确保代码可以直接用 manim render 运行
-6. 只输出 Python 代码，不要其他解释`;
+2. 脚本必须包含一个 Scene 类，类名为 KnowledgeAnimation
+3. 必须有 def construct(self) 方法
+4. 动画要有节奏感：标题展示(1-2秒) → 核心概念讲解 → 可视化演示 → 总结
+5. 所有文字标注使用中文（用 Text 对象，font_size=36-48）
+6. 数学公式使用 MathTex 对象
+7. 每个场景之间用注释标记：# === 场景 N：场景标题 ===
+8. 只输出 Python 代码，不要任何其他解释文字
+9. 使用 from manim import * 导入所有需要的模块
+10. 确保代码可以直接用 manim render 命令运行`;
 
   const userPrompt = `请为以下知识点生成 Manim 动画脚本：\n\n${description}`;
 
-  // 5. 调用 Gemini API
-  const apiKey = env.GEMINI_API_KEY;
+  // 5. 调用 AI
+  const modelConfig = getModelConfig(env);
+  const apiKey = modelConfig.getKey(env);
   if (!apiKey) {
-    return jsonResponse({ error: '服务器 API Key 未配置' }, 500);
+    return jsonResponse({ error: `服务器未配置 ${modelConfig.name} API Key` }, 500);
   }
 
-  const geminiResponse = await callGeminiAPI(apiKey, systemPrompt, userPrompt);
-
-  if (!geminiResponse.success) {
-    return jsonResponse({ error: 'AI 生成失败', detail: geminiResponse.error }, 502);
+  const aiResponse = await callAI(modelConfig, apiKey, systemPrompt, userPrompt);
+  if (!aiResponse.success) {
+    return jsonResponse({ error: 'AI 生成失败', detail: aiResponse.error }, 502);
   }
 
   // 6. 更新用量
   userData.usedThisMonth += 1;
   userData.lastGenerateAt = new Date().toISOString();
-  await env.USAGE_KV.put(userKey, JSON.stringify(userData), {
-    expirationTtl: 90 * 24 * 3600, // 90 天过期
-  });
+  await env.USAGE_KV.put(userKey, JSON.stringify(userData), { expirationTtl: 90 * 24 * 3600 });
 
-  // 7. 记录生成日志
-  const logKey = `log:${user_id}:${Date.now()}`;
-  await env.USAGE_KV.put(logKey, JSON.stringify({
-    user_id,
-    description: description.slice(0, 100),
-    narration_style,
-    plan: userData.plan,
-    timestamp: new Date().toISOString(),
+  // 7. 记录日志
+  await env.USAGE_KV.put(`log:${user_id}:${Date.now()}`, JSON.stringify({
+    user_id, description: description.slice(0, 100),
+    narration_style, plan: userData.plan,
+    model: modelConfig.name, timestamp: new Date().toISOString(),
   }), { expirationTtl: 30 * 24 * 3600 });
 
   return jsonResponse({
     success: true,
-    script: geminiResponse.script,
-    scenes: geminiResponse.scenes,
+    script: aiResponse.script,
+    scenes: aiResponse.scenes,
+    model: modelConfig.name,
     usage: {
-      plan: userData.plan,
-      used: userData.usedThisMonth,
-      max: plan.maxPerMonth,
+      plan: userData.plan, used: userData.usedThisMonth, max: plan.maxPerMonth,
     },
   });
 }
 
-// ========== 查询用量 ==========
+// ========== AI 调用 ==========
+async function callAI(modelConfig, apiKey, systemPrompt, userPrompt) {
+  const endpoint = modelConfig.endpoint;
+  const reqBody = modelConfig.buildBody(systemPrompt, userPrompt);
+
+  let fetchUrl = endpoint;
+  const headers = { 'Content-Type': 'application/json' };
+
+  // Gemini 用 query param 传 key
+  if (modelConfig.model === 'gemini') {
+    fetchUrl += `?key=${apiKey}`;
+  } else {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  const response = await fetch(fetchUrl, {
+    method: 'POST',
+    headers,
+    body: reqBody,
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    return { success: false, error: `${modelConfig.name} API error: ${response.status} - ${err}` };
+  }
+
+  const data = await response.json();
+  const text = modelConfig.parseResponse(data);
+
+  // 提取 Python 代码块
+  const codeMatch = text.match(/```(?:python)?\s*\n([\s\S]*?)```/);
+  const script = codeMatch ? codeMatch[1].trim() : text.trim();
+
+  // 解析场景
+  const scenes = [];
+  const sceneComments = script.matchAll(/#\s*===\s*场景\s*(\d+)[：:]\s*(.+?)(?:\n|$)/g);
+  for (const match of sceneComments) {
+    scenes.push({ index: parseInt(match[1]), title: match[2].trim() });
+  }
+
+  return { success: true, script, scenes };
+}
+
+// ========== 用量查询 ==========
 async function handleGetUsage(request, env) {
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('user_id');
+  const userId = new URL(request.url).searchParams.get('user_id');
   if (!userId) return jsonResponse({ error: '缺少 user_id' }, 400);
 
   const userData = await env.USAGE_KV.get(`user:${userId}`, 'json') || {
-    plan: 'free',
-    usedThisMonth: 0,
-    monthKey: getMonthKey(),
+    plan: 'free', usedThisMonth: 0, monthKey: getMonthKey(),
   };
 
-  const currentMonth = getMonthKey();
-  if (userData.monthKey !== currentMonth) {
+  if (userData.monthKey !== getMonthKey()) {
     userData.usedThisMonth = 0;
-    userData.monthKey = currentMonth;
+    userData.monthKey = getMonthKey();
   }
 
   const plan = SUBSCRIPTION_PLANS[userData.plan] || SUBSCRIPTION_PLANS.free;
 
   return jsonResponse({
-    plan: userData.plan,
-    planName: plan.name,
+    plan: userData.plan, planName: plan.name,
     usedThisMonth: userData.usedThisMonth,
     maxPerMonth: plan.maxPerMonth,
     remaining: plan.maxPerMonth === -1 ? -1 : plan.maxPerMonth - userData.usedThisMonth,
@@ -181,85 +244,29 @@ async function handleGetUsage(request, env) {
   });
 }
 
-// ========== 查询订阅 ==========
+// ========== 订阅查询 ==========
 async function handleGetSubscription(request, env) {
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('user_id');
+  const userId = new URL(request.url).searchParams.get('user_id');
   if (!userId) return jsonResponse({ error: '缺少 user_id' }, 400);
 
   const userData = await env.USAGE_KV.get(`user:${userId}`, 'json') || { plan: 'free' };
   const plan = SUBSCRIPTION_PLANS[userData.plan] || SUBSCRIPTION_PLANS.free;
 
   return jsonResponse({
-    currentPlan: userData.plan,
-    planName: plan.name,
-    price: plan.price,
-    plans: SUBSCRIPTION_PLANS,
+    currentPlan: userData.plan, planName: plan.name,
+    price: plan.price, plans: SUBSCRIPTION_PLANS,
+    currentModel: getModelName(env),
   });
 }
 
-// ========== Gemini API 调用 ==========
-async function callGeminiAPI(apiKey, systemPrompt, userPrompt) {
-  const model = 'gemini-2.5-flash-preview-05-20';
-
-  const payload = {
-    system_instruction: {
-      parts: [{ text: systemPrompt }],
-    },
-    contents: [{
-      parts: [{ text: userPrompt }],
-    }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 8192,
-    },
-  };
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }
-  );
-
-  if (!response.ok) {
-    const err = await response.text();
-    return { success: false, error: `Gemini API error: ${response.status} - ${err}` };
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // 提取 Python 代码块
-  const codeMatch = text.match(/```(?:python)?\s*\n([\s\S]*?)```/);
-  const script = codeMatch ? codeMatch[1].trim() : text.trim();
-
-  // 简单解析场景（从脚本注释中提取）
-  const scenes = [];
-  const sceneComments = script.matchAll(/#\s*===\s*场景\s*(\d+)[：:]\s*(.+?)(?:\n|$)/g);
-  for (const match of sceneComments) {
-    scenes.push({
-      index: parseInt(match[1]),
-      title: match[2].trim(),
-    });
-  }
-
-  return { success: true, script, scenes };
-}
-
-// ========== 工具函数 ==========
+// ========== 工具 ==========
 function getMonthKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
-
 function getMonthEnd() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+  return new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
 }
-
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
@@ -267,13 +274,9 @@ function corsHeaders() {
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 }
-
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...corsHeaders(),
-    },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
   });
 }
