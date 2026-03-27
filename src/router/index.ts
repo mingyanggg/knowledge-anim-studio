@@ -27,6 +27,11 @@ const routes: RouteRecordRaw[] = [
     name: "settings",
     component: () => import("../views/Settings.vue"),
   },
+  {
+    path: "/templates",
+    name: "templates",
+    component: () => import("../views/TemplateEditor.vue"),
+  },
 ];
 
 const router = createRouter({

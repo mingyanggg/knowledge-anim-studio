@@ -10,6 +10,7 @@ const menuItems = [
   { name: "生成", path: "/generate", icon: "✨" },
   { name: "渲染", path: "/render", icon: "🎬" },
   { name: "历史", path: "/history", icon: "📜" },
+  { name: "模板", path: "/templates", icon: "📋" },
   { name: "设置", path: "/settings", icon: "⚙️" },
 ];
 
@@ -66,7 +67,11 @@ onMounted(async () => {
 
     <!-- 主内容区 -->
     <main class="main-content">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <Transition name="page" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </router-view>
     </main>
   </div>
 </template>
@@ -184,5 +189,22 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   background-color: var(--bg-primary);
+}
+
+/* ==================== 页面过渡动画 ==================== */
+
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.2s var(--ease-apple);
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>
