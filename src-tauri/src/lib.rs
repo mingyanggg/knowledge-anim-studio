@@ -17,7 +17,7 @@ pub fn run() {
             manim::generate_script,
             manim::render_animation,
             manim::export_gif,
-            manim::export_mp4,
+            manim::export_to_path,
             // Subscription commands
             subscription::check_subscription,
             subscription::activate_code,
