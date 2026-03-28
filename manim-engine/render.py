@@ -341,12 +341,22 @@ class SimpleYamlRenderer:
                         "duration": time.time() - start_time
                     }
 
+                # If a specific output path was requested, copy the file there
+                final_path = mp4_path
+                if output_path:
+                    target = Path(output_path)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    import shutil
+                    shutil.copy2(str(mp4_path), str(target))
+                    final_path = target
+                    logger.info(f"Copied output to: {target}")
+
                 duration = time.time() - start_time
                 logger.info(f"Render completed successfully in {duration:.2f}s")
 
                 return {
                     "success": True,
-                    "output_path": str(mp4_path),
+                    "output_path": str(final_path),
                     "duration": duration,
                     "scene_name": scene_name
                 }
