@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // ==================== Props ====================
 
@@ -71,18 +70,13 @@ function toggleMute() {
 
 async function toggleFullscreen() {
   if (!videoRef.value) return;
-  try {
-    // Try Web Fullscreen API first
-    if (!document.fullscreenElement) {
-      await videoRef.value.requestFullscreen();
-    } else {
-      await document.exitFullscreen();
-    }
-  } catch {
-    // Fallback: use Tauri window fullscreen (macOS WebView may block Web API)
-    const appWindow = getCurrentWindow();
-    const isFull = await appWindow.isFullscreen();
-    await appWindow.setFullscreen(!isFull);
+  isFullscreen.value = !isFullscreen.value;
+
+  // CSS-based fullscreen for WKWebView compatibility (macOS)
+  if (isFullscreen.value) {
+    try { await document.documentElement.requestFullscreen?.(); } catch {}
+  } else {
+    try { await document.exitFullscreen?.(); } catch {}
   }
 }
 
@@ -138,20 +132,13 @@ function handleCanPlay() {
 }
 
 function handleFullscreenChange() {
-  isFullscreen.value = Boolean(document.fullscreenElement);
+  isFullscreen.value = Boolean(document.fullscreenElement) || isFullscreen.value;
 }
 
 // ==================== Lifecycle ====================
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener("fullscreenchange", handleFullscreenChange);
-  // Sync with Tauri fullscreen state
-  try {
-    const appWindow = getCurrentWindow();
-    appWindow.onResized(() => {
-      appWindow.isFullscreen().then((f) => { isFullscreen.value = f; }).catch(() => {});
-    });
-  } catch { /* non-Tauri environment */ }
 });
 
 onBeforeUnmount(() => {
@@ -172,7 +159,7 @@ watch(
 </script>
 
 <template>
-  <div class="video-player" v-if="hasVideo">
+  <div class="video-player" :class="{ 'is-fullscreen': isFullscreen }" v-if="hasVideo">
     <div class="video-container">
       <video
         ref="videoRef"
@@ -265,6 +252,19 @@ watch(
   height: 100%;
   display: flex;
   flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+/* CSS-based fullscreen for WKWebView compatibility */
+.video-player.is-fullscreen {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 99999 !important;
+  border-radius: 0 !important;
+  border: none !important;
 }
 
 .video-container {
