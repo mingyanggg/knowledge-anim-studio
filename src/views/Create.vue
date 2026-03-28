@@ -117,41 +117,29 @@ async function handleGenerate() {
   phase.value = "generating";
   progress.value = 0;
 
-  // 用户友好的进度文案（不含技术术语）
-  const sciStatuses = [
-    "正在理解你的知识点...",
-    "构思动画场景中...",
-    "搭建视觉框架...",
-    "设计动画效果...",
-    "绘制图形元素...",
-    "编排过渡动画...",
-    "优化视觉细节...",
-    "合成最终画面...",
-    "渲染高质量视频...",
-    "即将完成...",
+  // 分段进度：按实际步骤分配，让用户清楚当前在做什么
+  const stepStatuses = [
+    { at: 0,  msg: "正在理解你的知识点..." },
+    { at: 10, msg: "构思动画场景中..." },
+    { at: 25, msg: "生成动画脚本..." },
+    { at: 45, msg: "解析场景结构..." },
+    { at: 55, msg: "渲染动画画面（较慢，请稍候）..." },
+    { at: 75, msg: "生成配音..." },
+    { at: 85, msg: "合成音视频..." },
+    { at: 95, msg: "即将完成..." },
   ];
 
-  // 全程持续动画的进度条，不会卡住
   let stopProgress = false;
-  let statusIdx = 0;
   const startTime = Date.now();
   const progressLoop = () => {
     if (stopProgress) return;
     const elapsed = (Date.now() - startTime) / 1000;
-    // 先快后慢的曲线：前 3 秒到 60%，之后每秒涨 2-3%，最终卡在 95%
-    let p: number;
-    if (elapsed < 3) {
-      p = (elapsed / 3) * 60;
-    } else {
-      p = 60 + (elapsed - 3) * 1.5;
-    }
-    p = Math.min(p, 95);
+    // 缓慢线性增长，不会一下子冲到顶
+    let p = Math.min(elapsed * 1.2, 92);
     progress.value = Math.round(p);
-    const newIdx = Math.min(Math.floor(p / 10), sciStatuses.length - 1);
-    if (newIdx !== statusIdx) {
-      statusIdx = newIdx;
-      statusMessage.value = sciStatuses[statusIdx];
-    }
+    // 根据进度匹配文案
+    const status = stepStatuses.filter(s => s.at <= p).pop();
+    if (status) statusMessage.value = status.msg;
     requestAnimationFrame(progressLoop);
   };
   requestAnimationFrame(progressLoop);
@@ -159,7 +147,10 @@ async function handleGenerate() {
   try {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8787";
 
-    // 后台发送请求，进度条不卡
+    // Step 1: API 生成 YAML 脚本
+    statusMessage.value = "正在理解你的知识点...";
+    progress.value = 5;
+
     const response = await fetch(`${apiUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -176,21 +167,27 @@ async function handleGenerate() {
       throw new Error(errData.error || `请求失败 (${response.status})`);
     }
 
+    progress.value = 40;
     const data = await response.json();
 
     if (data.script) {
       try {
-        statusMessage.value = "正在生成动画场景...";
+        // Step 2: 渲染动画（最慢的步骤）
+        statusMessage.value = "渲染动画画面（较慢，请稍候）...";
+        progress.value = 50;
+
         const result = await invoke<any>("render_with_audio", {
           script: data.script,
           narrationStyle: selectedNarrationStyle.value.id,
         });
 
-        if (result.success && result.output_path) {
+        stopProgress = true;
           stopProgress = true;
           progress.value = 100;
           statusMessage.value = "生成完成！";
           videoPath.value = result.output_path;
+          progress.value = 100;
+          statusMessage.value = "生成完成！";
           phase.value = "done";
         } else {
           throw new Error(result.log || "视频渲染失败");
