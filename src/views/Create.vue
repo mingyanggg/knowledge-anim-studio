@@ -2,18 +2,38 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import VideoPlayer from "../components/VideoPlayer.vue";
+import Toast from "../components/Toast.vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
-import { getNarrationStyleById, getVisualStyleById } from "../services/caseService";
 
 const router = useRouter();
 const route = useRoute();
 
-// 输入状态
+// ==================== 输入状态 ====================
+
 const description = ref("");
 
-// 解说风格
+// ==================== 示例建议 ====================
+
+interface ExamplePrompt {
+  text: string;
+  icon: string;
+}
+
+const examplePrompts: ExamplePrompt[] = [
+  { text: "勾股定理的几何证明", icon: "📐" },
+  { text: "牛顿第三定律", icon: "🍎" },
+  { text: "原子结构模型", icon: "⚛️" },
+  { text: "二次函数图像", icon: "📈" },
+];
+
+function handleExampleClick(example: ExamplePrompt) {
+  description.value = example.text;
+}
+
+// ==================== 解说风格 ====================
+
 interface NarrationStyle {
   id: string;
   name: string;
@@ -32,7 +52,8 @@ const narrationStyles: NarrationStyle[] = [
 
 const selectedNarrationStyle = ref<NarrationStyle>(narrationStyles[0]);
 
-// 视觉风格
+// ==================== 视觉风格 ====================
+
 interface VisualStyle {
   id: string;
   name: string;
@@ -48,16 +69,34 @@ const visualStyles: VisualStyle[] = [
 
 const selectedVisualStyle = ref<VisualStyle>(visualStyles[0]);
 
-// 生成状态
+// ==================== 生成状态 ====================
+
 type GenerationPhase = "idle" | "generating" | "rendering" | "done";
 const phase = ref<GenerationPhase>("idle");
 const progress = ref(0);
 const statusMessage = ref("");
 
-// 视频路径
+// ==================== 视频路径 ====================
+
 const videoPath = ref<string>("");
 
-// 用户ID
+// ==================== Toast 反馈 ====================
+
+const toastVisible = ref(false);
+const toastMessage = ref("");
+const toastType = ref<"success" | "error" | "warning" | "info">("success");
+
+function showToast(message: string, type: "success" | "error" | "warning" | "info" = "success") {
+  toastMessage.value = message;
+  toastType.value = type;
+  toastVisible.value = true;
+  setTimeout(() => {
+    toastVisible.value = false;
+  }, 3000);
+}
+
+// ==================== 用户ID ====================
+
 const getUserId = () => {
   const userId = localStorage.getItem("user_id");
   if (userId) return userId;
@@ -66,20 +105,61 @@ const getUserId = () => {
   return newId;
 };
 
-// 计算属性
+// ==================== 计算属性 ====================
+
 const canGenerate = computed(() => description.value.trim().length > 0);
 
-// 生成动画
+// ==================== 生成动画 ====================
+
 async function handleGenerate() {
   if (!canGenerate.value || phase.value !== "idle") return;
 
   phase.value = "generating";
   progress.value = 0;
-  statusMessage.value = "AI 正在编写脚本...";
+
+  // 用户友好的进度文案（不含技术术语）
+  const sciStatuses = [
+    "正在理解你的知识点...",
+    "构思动画场景中...",
+    "搭建视觉框架...",
+    "设计动画效果...",
+    "绘制图形元素...",
+    "编排过渡动画...",
+    "优化视觉细节...",
+    "合成最终画面...",
+    "渲染高质量视频...",
+    "即将完成...",
+  ];
+
+  // 全程持续动画的进度条，不会卡住
+  let stopProgress = false;
+  let statusIdx = 0;
+  const startTime = Date.now();
+  const progressLoop = () => {
+    if (stopProgress) return;
+    const elapsed = (Date.now() - startTime) / 1000;
+    // 先快后慢的曲线：前 3 秒到 60%，之后每秒涨 2-3%，最终卡在 95%
+    let p: number;
+    if (elapsed < 3) {
+      p = (elapsed / 3) * 60;
+    } else {
+      p = 60 + (elapsed - 3) * 1.5;
+    }
+    p = Math.min(p, 95);
+    progress.value = Math.round(p);
+    const newIdx = Math.min(Math.floor(p / 10), sciStatuses.length - 1);
+    if (newIdx !== statusIdx) {
+      statusIdx = newIdx;
+      statusMessage.value = sciStatuses[statusIdx];
+    }
+    requestAnimationFrame(progressLoop);
+  };
+  requestAnimationFrame(progressLoop);
 
   try {
     const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8787";
 
+    // 后台发送请求，进度条不卡
     const response = await fetch(`${apiUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -92,40 +172,49 @@ async function handleGenerate() {
     });
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `请求失败 (${response.status})`);
     }
 
     const data = await response.json();
 
-    // 更新进度
-    statusMessage.value = "正在渲染视频...";
-    progress.value = 50;
-
     if (data.script) {
-      // 调用 Tauri 命令渲染视频
-      progress.value = 75;
-      statusMessage.value = "即将完成...";
+      try {
+        statusMessage.value = "正在生成动画场景...";
+        const result = await invoke<any>("render_animation", {
+          script: data.script,
+        });
 
-      const outputPath = await invoke<string>("render_manim", {
-        script: data.script,
-      });
-
-      // 渲染完成
-      progress.value = 100;
-      videoPath.value = outputPath;
-      phase.value = "done";
+        if (result.success && result.output_path) {
+          stopProgress = true;
+          progress.value = 100;
+          statusMessage.value = "生成完成！";
+          videoPath.value = result.output_path;
+          phase.value = "done";
+        } else {
+          throw new Error(result.log || "视频渲染失败");
+        }
+      } catch (renderError: any) {
+        console.error("Render error:", renderError);
+        const errMsg = String(renderError || "");
+        console.log("[DEBUG render error]", errMsg.substring(0, 1000));
+        statusMessage.value = "视频渲染遇到问题，请稍后重试";
+        phase.value = "error";
+        return;
+      }
+    } else {
+      throw new Error("未能成功生成内容");
     }
-  } catch (error) {
+  } catch (error: any) {
+    stopProgress = true;
     console.error("Generation error:", error);
-    // 演示模式：模拟完成
-    setTimeout(() => {
-      progress.value = 100;
-      phase.value = "done";
-    }, 2000);
+    statusMessage.value = error.message || "生成失败，请稍后重试";
+    phase.value = "error";
   }
 }
 
-// 导出视频
+// ==================== 导出视频 ====================
+
 async function handleExport() {
   if (!videoPath.value) return;
 
@@ -141,24 +230,28 @@ async function handleExport() {
     });
 
     if (filePath) {
-      await invoke("copy_file", {
-        from: videoPath.value,
-        to: filePath,
+      await invoke("export_to_path", {
+        sourcePath: videoPath.value,
+        destPath: filePath,
       });
+      showToast("视频导出成功！", "success");
     }
   } catch (error) {
     console.error("Export error:", error);
+    showToast("导出失败，请重试", "error");
   }
 }
 
-// 重新生成
+// ==================== 重新生成 ====================
+
 function handleRegenerate() {
   videoPath.value = "";
   phase.value = "idle";
   progress.value = 0;
 }
 
-// 初始化时从 query 参数填充
+// ==================== 初始化 ====================
+
 onMounted(() => {
   const desc = route.query.desc as string;
   if (desc) {
@@ -174,35 +267,17 @@ onMounted(() => {
   }
 });
 
-// 导航到灵感页
-function goToInspiration() {
-  router.push("/inspiration");
-}
-
-// 导航到历史页
-function goToHistory() {
-  router.push("/history");
-}
-
-// 导航到设置页
-function goToSettings() {
-  router.push("/settings");
-}
 </script>
 
 <template>
   <div class="create-page">
-    <!-- Top bar -->
-    <header class="top-bar">
-      <div class="app-logo">🧪</div>
-      <h1 class="app-title">Knowledge Anim Studio</h1>
-      <nav class="top-nav">
-        <button class="nav-link" @click="goToInspiration">灵感</button>
-        <button class="nav-link" @click="goToHistory">历史</button>
-        <button class="nav-link" @click="goToSettings">设置</button>
-      </nav>
-    </header>
-
+    <!-- Toast notification -->
+    <Toast
+      v-if="toastVisible"
+      :message="toastMessage"
+      :type="toastType"
+      @close="toastVisible = false"
+    />
     <!-- Main content -->
     <main class="main-content">
       <!-- Input section -->
@@ -211,9 +286,22 @@ function goToSettings() {
           v-model="description"
           type="text"
           class="main-input"
-          placeholder="描述你想制作的知识点动画..."
+          placeholder="输入知识点，例如：勾股定理的证明"
           @keypress.enter="canGenerate && phase === 'idle' && handleGenerate()"
         />
+
+        <!-- Example prompts -->
+        <div class="example-prompts">
+          <button
+            v-for="example in examplePrompts"
+            :key="example.text"
+            class="example-chip"
+            @click="handleExampleClick(example)"
+          >
+            <span class="example-icon">{{ example.icon }}</span>
+            <span class="example-text">{{ example.text }}</span>
+          </button>
+        </div>
 
         <!-- Style selector row -->
         <div class="style-row">
@@ -257,9 +345,15 @@ function goToSettings() {
 
       <!-- Result area -->
       <section class="result-section">
-        <!-- Empty state -->
+        <!-- Empty state with animation -->
         <div v-if="phase === 'idle'" class="empty-result">
-          <span class="empty-icon">🎬</span>
+          <div class="empty-animation">
+            <div class="film-reel">
+              <div class="reel-left"></div>
+              <div class="reel-center"></div>
+              <div class="reel-right"></div>
+            </div>
+          </div>
           <p class="empty-text">输入知识点，开始创作你的动画</p>
         </div>
 
@@ -269,11 +363,12 @@ function goToSettings() {
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progress + '%' }" />
           </div>
+          <p class="encourage-text">正在精心制作中，请耐心等待，马上就好 ✨</p>
         </div>
 
-        <!-- Done state -->
+        <!-- Done state with video player -->
         <div v-else-if="phase === 'done'" class="done-result">
-          <VideoPlayer v-if="videoPath" :src="videoPath" :autoplay="true" />
+          <VideoPlayer v-if="videoPath" :src="videoPath" :autoplay="true" class="video-player-wrapper" />
           <div v-else class="demo-result">
             <p>演示模式：视频生成完成</p>
           </div>
@@ -285,6 +380,14 @@ function goToSettings() {
               🔄 重新生成
             </button>
           </div>
+        </div>
+
+        <!-- Error state -->
+        <div v-else-if="phase === 'error'" class="error-result">
+          <p class="error-text">{{ statusMessage }}</p>
+          <button class="action-button primary" @click="handleRegenerate">
+            🔄 重新生成
+          </button>
         </div>
       </section>
     </main>
@@ -364,8 +467,8 @@ function goToSettings() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 32px 24px;
+  gap: 12px;
+  padding: 20px 24px 16px;
   flex-shrink: 0;
 }
 
@@ -390,6 +493,46 @@ function goToSettings() {
 
 .main-input::placeholder {
   color: var(--text-tertiary);
+}
+
+/* ==================== Example Prompts ==================== */
+
+.example-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.example-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-base) var(--ease-apple);
+}
+
+.example-chip:hover {
+  border-color: var(--accent);
+  background-color: var(--bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.example-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.example-text {
+  line-height: 1;
 }
 
 /* ==================== Style Row ==================== */
@@ -449,6 +592,7 @@ function goToSettings() {
 
 .visual-styles {
   display: flex;
+  align-items: center;
   gap: 12px;
 }
 
@@ -474,13 +618,13 @@ function goToSettings() {
 /* ==================== Generate Button ==================== */
 
 .generate-button {
-  padding: 0 32px;
-  height: 44px;
+  padding: 0 28px;
+  height: 38px;
   background-color: var(--accent);
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   color: white;
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-base) var(--ease-apple);
@@ -507,26 +651,107 @@ function goToSettings() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 0 24px 16px;
   overflow: hidden;
+  min-height: 0;
 }
 
-/* Empty state */
+/* Empty state with animation */
 .empty-result {
   text-align: center;
   color: var(--text-tertiary);
 }
 
-.empty-icon {
-  font-size: 64px;
-  display: block;
-  margin-bottom: 16px;
-  opacity: 0.5;
+.empty-animation {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.film-reel {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.film-reel::before,
+.film-reel::after {
+  content: '';
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border: 3px solid var(--bg-tertiary);
+  border-radius: 50%;
+  animation: rotate 8s linear infinite;
+}
+
+.film-reel::after {
+  width: 60px;
+  height: 60px;
+  top: 10px;
+  left: 10px;
+  border-color: var(--text-tertiary);
+  animation-direction: reverse;
+  animation-duration: 6s;
+}
+
+.reel-left,
+.reel-right {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 50%;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.reel-left {
+  left: -6px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.reel-right {
+  right: -6px;
+  animation: pulse 2s ease-in-out infinite 0.5s;
+}
+
+.reel-center {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: pulse 2s ease-in-out infinite 1s;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.1);
+  }
 }
 
 .empty-text {
   font-size: 17px;
   margin: 0;
+  color: var(--text-secondary);
 }
 
 /* Generating state */
@@ -553,6 +778,19 @@ function goToSettings() {
   height: 100%;
   background-color: var(--accent);
   transition: width 0.3s var(--ease-apple);
+  border-radius: 99px;
+}
+
+.encourage-text {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 /* Done state */
@@ -560,14 +798,17 @@ function goToSettings() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   width: 100%;
-  max-width: 800px;
+  max-width: 720px;
+  height: 100%;
 }
 
-.done-result :deep(.video-player) {
+.video-player-wrapper {
   width: 100%;
-  max-height: calc(100vh - 300px);
+  max-width: 800px;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
 }
 
 .demo-result {
@@ -576,15 +817,31 @@ function goToSettings() {
   color: var(--text-secondary);
 }
 
+.error-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 20px;
+}
+
+.error-text {
+  color: var(--text-secondary);
+  font-size: 15px;
+  text-align: center;
+}
+
 .action-buttons {
   display: flex;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .action-button {
-  padding: 12px 24px;
+  padding: 8px 20px;
   border-radius: var(--radius-button);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-base) var(--ease-apple);
@@ -614,19 +871,6 @@ function goToSettings() {
 /* ==================== Responsive ==================== */
 
 @media (max-width: 768px) {
-  .top-bar {
-    padding: 12px 16px;
-  }
-
-  .app-title {
-    font-size: 15px;
-  }
-
-  .nav-link {
-    padding: 6px 12px;
-    font-size: 14px;
-  }
-
   .input-section {
     padding: 24px 16px;
   }
