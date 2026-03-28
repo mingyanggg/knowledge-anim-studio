@@ -243,21 +243,32 @@ watch(
 .video-player {
   background-color: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-card);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .video-container {
   position: relative;
   width: 100%;
+  flex: 1;
+  min-height: 0;
   background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .video-element {
   width: 100%;
+  height: 100%;
+  object-fit: contain;
   display: block;
-  max-height: 70vh;
 }
 
 .loading-overlay {

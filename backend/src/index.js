@@ -32,7 +32,7 @@ export default {
 
 // ========== 订阅配额 ==========
 const SUBSCRIPTION_PLANS = {
-  free:     { name: '免费版', maxPerMonth: 3,   price: 0 },
+  free:     { name: '免费版', maxPerMonth: -1,   price: 0 },
   basic:    { name: '基础版', maxPerMonth: 50,  price: 29 },
   pro:      { name: '专业版', maxPerMonth: 150, price: 59 },
   ultimate: { name: '旗舰版', maxPerMonth: -1,  price: 199 },
@@ -120,7 +120,32 @@ async function handleGenerate(request, env) {
     storytelling: '用讲故事的方式，有起承转合，从生活场景切入知识概念。像纪录片一样娓娓道来。',
   };
 
-  const systemPrompt = `你是一个专业的 Manim（Python 动画引擎）脚本编写专家。用户会给你一个知识点描述，你需要生成完整的、可直接运行的 Manim Python 脚本。
+  const systemPrompt = `你是一个专业的 Manim Studio 动画配置专家。用户会给你一个知识点描述，你需要生成完整的、可直接渲染的 Manim Studio YAML 配置。
+
+Manim Studio YAML 格式说明：
+- scene: 场景配置根节点
+  - name: 场景名称（英文，如 "KnowledgeAnimation"）
+  - description: 场景描述
+  - duration: 总时长（秒）
+  - fps: 帧率（默认60）
+  - resolution: 分辨率数组，如 [1920, 1080]
+  - background_color: 背景色（如 "#000000"）
+  - objects: 对象数组
+    - name: 对象唯一标识
+    - type: 对象类型（text/shape/group）
+    - params: 对象参数
+      - 对于 text: text（文字内容）, font_size, color, gradient
+      - 对于 shape: shape_type（circle/square/rectangle/polygon）, radius, side_length, color, fill_opacity, stroke_width
+    - position: 位置数组 [x, y, z]
+  - animations: 动画数组
+    - target: 目标对象名称
+    - type: 动画类型（write/create/fadein/fadeout/move/scale/rotate/transform）
+    - start_time: 开始时间（秒）
+    - duration: 动画时长（秒）
+    - params: 动画参数（可选）
+      - 对于 move: to（目标位置）
+      - 对于 scale: factor（缩放因子）
+      - 对于 rotate: angle（角度，度数）
 
 解说风格要求：${stylePrompts[narration_style] || stylePrompts.classroom}
 视觉风格：主色 ${visual_style?.primary || '#007aff'}，辅色 ${visual_style?.secondary || '#5856d6'}
@@ -128,16 +153,36 @@ async function handleGenerate(request, env) {
 帧率：${fps || 60} FPS
 
 要求：
-1. 生成完整的可运行 Manim Python 脚本
-2. 脚本必须包含一个 Scene 类，类名为 KnowledgeAnimation
-3. 必须有 def construct(self) 方法
-4. 动画要有节奏感：标题展示(1-2秒) → 核心概念讲解 → 可视化演示 → 总结
-5. 所有文字标注使用中文（用 Text 对象，font_size=36-48）
-6. 数学公式使用 MathTex 对象
-7. 每个场景之间用注释标记：# === 场景 N：场景标题 ===
-8. 只输出 Python 代码，不要任何其他解释文字
-9. 使用 from manim import * 导入所有需要的模块
-10. 确保代码可以直接用 manim render 命令运行`;
+1. 生成完整的 Manim Studio YAML 配置
+2. 必须包含 scene 根节点，内部包含 name、duration、objects、animations
+3. 动画要有节奏感：标题展示 → 核心概念讲解 → 可视化演示 → 总结
+4. 所有文字使用 text 类型对象，font_size 建议 36-48
+5. 数学公式用纯文本方式呈现（如 "a² - b² = (a+b)(a-b)"）
+6. 只输出 YAML 配置，不要任何其他解释文字
+7. 确保每个动画的 target 都能在 objects 中找到对应对象
+8. 动画时间要合理安排，避免重叠冲突
+
+示例格式：
+scene:
+  name: "ExampleScene"
+  description: "示例场景"
+  duration: 30
+  fps: 60
+  resolution: [1920, 1080]
+  background_color: "#000000"
+  objects:
+    - name: "title"
+      type: "text"
+      params:
+        text: "标题"
+        font_size: 48
+        color: "#007aff"
+      position: [0, 2, 0]
+  animations:
+    - target: "title"
+      type: "write"
+      start_time: 0
+      duration: 2`;
 
   const userPrompt = `请为以下知识点生成 Manim 动画脚本：\n\n${description}`;
 
@@ -205,18 +250,47 @@ async function callAI(modelConfig, apiKey, systemPrompt, userPrompt) {
   const data = await response.json();
   const text = modelConfig.parseResponse(data);
 
-  // 提取 Python 代码块
-  const codeMatch = text.match(/```(?:python)?\s*\n([\s\S]*?)```/);
-  const script = codeMatch ? codeMatch[1].trim() : text.trim();
+  // 提取 YAML 配置
+  // 尝试匹配 YAML 代码块
+  const yamlMatch = text.match(/```(?:yaml)?\s*\n([\s\S]*?)```/);
+  let yamlConfig = yamlMatch ? yamlMatch[1].trim() : text.trim();
 
-  // 解析场景
-  const scenes = [];
-  const sceneComments = script.matchAll(/#\s*===\s*场景\s*(\d+)[：:]\s*(.+?)(?:\n|$)/g);
-  for (const match of sceneComments) {
-    scenes.push({ index: parseInt(match[1]), title: match[2].trim() });
+  // 如果没有代码块，尝试找到 scene: 开头的内容
+  if (!yamlConfig.includes('scene:')) {
+    const sceneMatch = text.match(/scene:\s*\n((?:[\s\S]*?)(?=\n\w+:|\n\n\n|$))/);
+    if (sceneMatch) {
+      yamlConfig = 'scene:\n' + sceneMatch[1].trim();
+    }
   }
 
-  return { success: true, script, scenes };
+  // 清理可能的 markdown 格式
+  yamlConfig = yamlConfig
+    .replace(/^```\w*\n/, '')  // 移除开头的代码块标记
+    .replace(/```$/, '')        // 移除结尾的代码块标记
+    .trim();
+
+  // 验证基本结构
+  if (!yamlConfig.includes('scene:') || !yamlConfig.includes('objects:') || !yamlConfig.includes('animations:')) {
+    return {
+      success: false,
+      error: '生成的配置缺少必要字段（scene/objects/animations）',
+      raw: yamlConfig
+    };
+  }
+
+  // 解析场景信息（从 objects 中提取标题作为场景名称）
+  const scenes = [];
+  try {
+    // 简单的 YAML 解析（不用引入 yaml 解析库）
+    const titleMatch = yamlConfig.match(/-\s*name:\s*["'](.+?)["']\s*\n\s*type:\s*["']text["']\s*\n\s*params:\s*\n\s*text:\s*["'](.+?)["']/);
+    if (titleMatch) {
+      scenes.push({ index: 1, title: titleMatch[2] });
+    }
+  } catch (e) {
+    // 解析失败不影响返回
+  }
+
+  return { success: true, script: yamlConfig, scenes };
 }
 
 // ========== 用量查询 ==========
