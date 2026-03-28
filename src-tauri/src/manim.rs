@@ -281,19 +281,29 @@ fn extract_narration_from_yaml(yaml: &str) -> String {
 
     for line in yaml.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("objects:") {
+
+        // Track whether we're in the objects section
+        if trimmed == "objects:" {
             in_objects = true;
             continue;
         }
-        if in_objects {
-            if trimmed.starts_with("- name:") || trimmed.starts_with("animations:") {
+        // Exit objects section when animations start or a new top-level key appears
+        if in_objects && (trimmed == "animations:" || (trimmed.ends_with(':') && !trimmed.starts_with('-') && !trimmed.starts_with('#'))) {
+            // Only break if it's a top-level key (not indented like "text:" or "type:")
+            let indent = line.len() - line.trim_start().len();
+            if indent == 0 {
                 break;
             }
-            if trimmed.starts_with("text:") {
-                let text_val = trimmed.trim_start_matches("text:").trim().trim_matches('"').trim_matches('\'');
-                if !text_val.is_empty() && !text_val.contains("{") {
-                    texts.push(text_val.to_string());
-                }
+        }
+        if !in_objects {
+            continue;
+        }
+
+        // Match text: lines (inside objects > params > text)
+        if trimmed.starts_with("text:") {
+            let text_val = trimmed.trim_start_matches("text:").trim().trim_matches('"').trim_matches('\'');
+            if !text_val.is_empty() && !text_val.contains('{') {
+                texts.push(text_val.to_string());
             }
         }
     }
@@ -323,10 +333,13 @@ pub async fn render_with_audio(
 
     eprintln!("[render_with_audio] Narration text ({} chars), style={}", narration_text.len(), narration_style);
 
-    let tts_script = PathBuf::from(MANIM_OUTPUT_DIR).parent()
-        .unwrap_or(&PathBuf::from("."))
-        .join("manim-engine")
-        .join("tts.py");
+    // Locate project root (same logic as render_animation)
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .unwrap_or_else(|_| ".".to_string());
+    let project_root = PathBuf::from(&manifest_dir).parent()
+        .map(|p| PathBuf::from(p))
+        .unwrap_or_else(|| PathBuf::from(&manifest_dir));
+    let tts_script = project_root.join("manim-engine").join("tts.py");
 
     let audio_path = PathBuf::from(MANIM_OUTPUT_DIR).join("narration.mp3");
     let merged_path = PathBuf::from(MANIM_OUTPUT_DIR).join("final_with_audio.mp4");

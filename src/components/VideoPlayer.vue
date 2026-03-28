@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // ==================== Props ====================
 
@@ -68,13 +69,20 @@ function toggleMute() {
   isMuted.value = videoRef.value.muted;
 }
 
-function toggleFullscreen() {
+async function toggleFullscreen() {
   if (!videoRef.value) return;
-
-  if (!isFullscreen.value) {
-    videoRef.value.requestFullscreen().catch(console.error);
-  } else {
-    document.exitFullscreen().catch(console.error);
+  try {
+    // Try Web Fullscreen API first
+    if (!document.fullscreenElement) {
+      await videoRef.value.requestFullscreen();
+    } else {
+      await document.exitFullscreen();
+    }
+  } catch {
+    // Fallback: use Tauri window fullscreen (macOS WebView may block Web API)
+    const appWindow = getCurrentWindow();
+    const isFull = await appWindow.isFullscreen();
+    await appWindow.setFullscreen(!isFull);
   }
 }
 
@@ -135,8 +143,15 @@ function handleFullscreenChange() {
 
 // ==================== Lifecycle ====================
 
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener("fullscreenchange", handleFullscreenChange);
+  // Sync with Tauri fullscreen state
+  try {
+    const appWindow = getCurrentWindow();
+    appWindow.onResized(() => {
+      appWindow.isFullscreen().then((f) => { isFullscreen.value = f; }).catch(() => {});
+    });
+  } catch { /* non-Tauri environment */ }
 });
 
 onBeforeUnmount(() => {
