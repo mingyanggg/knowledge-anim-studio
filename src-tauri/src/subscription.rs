@@ -29,6 +29,7 @@ impl PlanType {
     }
 
     /// Character code for encoding
+    #[allow(dead_code)]
     pub fn code_char(&self) -> char {
         match self {
             PlanType::Monthly => 'M',
@@ -109,6 +110,7 @@ fn sign(data: &str) -> String {
 }
 
 /// Generate an activation code
+#[allow(dead_code)]
 pub fn generate_activation_code(plan: PlanType, created_at: Option<i64>) -> String {
     let now = created_at.unwrap_or_else(|| {
         SystemTime::now()

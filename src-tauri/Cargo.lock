@@ -1971,7 +1971,6 @@ dependencies = [
  "chrono",
  "hex",
  "hmac-sha256",
- "regex",
  "rusqlite",
  "serde",
  "serde_json",

@@ -131,7 +131,7 @@ pub async fn render_animation(script: String) -> Result<RenderResult, String> {
             render_wrapper.to_str().unwrap(),
             yaml_path.to_str().unwrap(),
             "-o", &format!("{}/videos/{}.mp4", MANIM_OUTPUT_DIR, scene_name),
-            "-qm",  // Medium quality (720p30) for better output quality
+            "-q", "m",  // Medium quality (720p30) for better output quality
         ])
         .env("PYTHONIOENCODING", "utf-8")
         .stdout(Stdio::piped())
@@ -142,18 +142,20 @@ pub async fn render_animation(script: String) -> Result<RenderResult, String> {
             format!("Failed to run render wrapper: {}", e)
         })?;
 
+    // Use wait_with_output but check elapsed time
     let output = match child.wait_with_output() {
         Ok(output) => output,
         Err(e) => return Err(format!("Failed to wait for Manim process: {}", e)),
     };
 
     let elapsed = start.elapsed();
-    let elapsed_f64 = elapsed.as_secs_f64();
 
     if elapsed.as_secs() > RENDER_TIMEOUT_SECS {
         eprintln!("[render_animation] Render timed out after {}s", elapsed.as_secs());
         return Err(format!("Manim render timed out after {} seconds.", elapsed.as_secs()));
     }
+
+    let elapsed_f64 = elapsed.as_secs_f64();
 
     let stderr_log = String::from_utf8_lossy(&output.stderr).to_string();
     let stdout_log = String::from_utf8_lossy(&output.stdout).to_string();
@@ -235,46 +237,33 @@ fn extract_scene_name_from_yaml(yaml: &str) -> Result<String, String> {
     Err("No scene name found in YAML".to_string())
 }
 
-// Keep the old function for backward compatibility
-fn extract_scene_name(script: &str) -> Result<String, String> {
-    use regex::Regex;
-    let re = Regex::new(r"class\s+(\w+)\s*\(\s*(?:Scene|MovingCameraScene|ThreeDScene)").unwrap();
-    if let Some(caps) = re.captures(script) {
-        Ok(caps[1].to_string())
-    } else {
-        Err("No Scene class found in script".to_string())
-    }
-}
-
+/// Export a video file to GIF using ffmpeg (convert existing MP4 → GIF)
 #[tauri::command]
 pub async fn export_gif(video_path: String) -> Result<String, String> {
-    let _output_path = PathBuf::from(&video_path).with_extension("gif");
+    let input = PathBuf::from(&video_path);
+    if !input.exists() {
+        return Err(format!("Video file not found: {}", video_path));
+    }
 
-    let output = Command::new(MANIM_PYTHON)
+    let gif_path = input.with_extension("gif");
+
+    // Use ffmpeg to convert MP4 to GIF with reasonable quality
+    let output = Command::new("ffmpeg")
         .args([
-            "-m", "manim", "render",
-            "--format", "gif",
-            "-ql",
-            "--media_dir", MANIM_OUTPUT_DIR,
-            &format!("{}/temp_scene.py", MANIM_OUTPUT_DIR),
-            "GeneratedScene",
+            "-y",
+            "-i", &video_path,
+            "-vf", "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+            "-loop", "0",
+            gif_path.to_str().unwrap(),
         ])
         .output()
-        .map_err(|e| format!("GIF export failed: {}", e))?;
+        .map_err(|e| format!("ffmpeg not found or failed to run: {}", e))?;
 
-    if output.status.success() {
-        let gif_dir = PathBuf::from(MANIM_OUTPUT_DIR).join("videos").join("low_quality").join("480p15");
-        if let Ok(entries) = std::fs::read_dir(&gif_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map_or(false, |e| e == "gif") {
-                    return Ok(path.to_string_lossy().to_string());
-                }
-            }
-        }
-        Err("GIF render succeeded but file not found".to_string())
+    if output.status.success() && gif_path.exists() {
+        Ok(gif_path.to_string_lossy().to_string())
     } else {
-        Err(format!("GIF export failed: {}", String::from_utf8_lossy(&output.stderr)))
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("GIF export failed: {}", stderr))
     }
 }
 
@@ -289,13 +278,11 @@ pub async fn export_to_path(source_path: String, dest_path: String) -> Result<St
 fn extract_narration_from_yaml(yaml: &str) -> String {
     let mut texts = Vec::new();
     let mut in_objects = false;
-    let mut brace_depth = 0;
 
     for line in yaml.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("objects:") {
             in_objects = true;
-            brace_depth = 0;
             continue;
         }
         if in_objects {
@@ -367,20 +354,16 @@ pub async fn render_with_audio(
         return Ok(video_result);
     }
 
-    // Step 3: Merge audio with video using tts.py's merge function
+    // Step 3: Merge audio with video using a proper Python script invocation (not f-string in -c)
     let merge_script = tts_script.clone();
     let child = Command::new(MANIM_PYTHON)
         .args([
             "-c",
-            &format!(
-                "import sys; sys.path.insert(0, '{}'); from tts import merge_audio_with_video; \
-                 import json; result = merge_audio_with_video('{}', '{}', '{}'); \
-                 print(json.dumps(result, ensure_ascii=False))",
-                merge_script.parent().unwrap().display(),
-                video_path.display(),
-                audio_path.display(),
-                merged_path.display(),
-            ),
+            "import sys,json,os; sys.path.insert(0,os.path.dirname(sys.argv[1])); from tts import merge_audio_with_video; r=merge_audio_with_video(sys.argv[2],sys.argv[3],sys.argv[4]); print(json.dumps(r,ensure_ascii=False))",
+            "--", merge_script.to_str().unwrap(),
+            video_path.to_str().unwrap(),
+            audio_path.to_str().unwrap(),
+            merged_path.to_str().unwrap(),
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
