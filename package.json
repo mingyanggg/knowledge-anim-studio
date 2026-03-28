@@ -1,13 +1,14 @@
 {
   "name": "knowledge-anim-studio",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "kill": "pkill -f 'knowledge-anim-studio' 2>/dev/null; pkill -f 'wrangler.*dev.*knowledge-anim' 2>/dev/null; echo 'All processes killed'"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
