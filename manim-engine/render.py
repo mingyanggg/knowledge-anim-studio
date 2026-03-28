@@ -127,9 +127,9 @@ class SimpleYamlRenderer:
 
                 if gradient:
                     gradient_str = str(gradient).replace("'", '"')
-                    script_lines.append(f"        {var_name} = Text('{text}', gradient={gradient_str}, font_size={font_size})")
+                    script_lines.append(f"        {var_name} = Text({repr(text)}, gradient={gradient_str}, font_size={font_size})")
                 else:
-                    script_lines.append(f"        {var_name} = Text('{text}', color='{color}', font_size={font_size})")
+                    script_lines.append(f"        {var_name} = Text({repr(text)}, color='{color}', font_size={font_size})")
 
             elif obj_type == 'shape':
                 shape_type = params.get('shape_type', 'circle')
