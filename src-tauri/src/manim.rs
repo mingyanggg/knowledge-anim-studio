@@ -367,13 +367,17 @@ pub async fn render_with_audio(
         return Ok(video_result);
     }
 
-    // Step 3: Merge audio with video using a proper Python script invocation (not f-string in -c)
-    let merge_script = tts_script.clone();
+    // Step 3: Merge audio with video
+    let tts_dir = tts_script.parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string());
     let child = Command::new(MANIM_PYTHON)
         .args([
             "-c",
-            "import sys,json,os; sys.path.insert(0,os.path.dirname(sys.argv[1])); from tts import merge_audio_with_video; r=merge_audio_with_video(sys.argv[2],sys.argv[3],sys.argv[4]); print(json.dumps(r,ensure_ascii=False))",
-            "--", merge_script.to_str().unwrap(),
+            &format!(
+                "import sys,json,os; sys.path.insert(0,{}); from tts import merge_audio_with_video; r=merge_audio_with_video(sys.argv[1],sys.argv[2],sys.argv[3]); print(json.dumps(r,ensure_ascii=False))",
+                serde_json::to_string(&tts_dir).unwrap(),
+            ),
             video_path.to_str().unwrap(),
             audio_path.to_str().unwrap(),
             merged_path.to_str().unwrap(),
