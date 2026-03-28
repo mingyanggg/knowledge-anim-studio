@@ -20,7 +20,6 @@ const videoRef = ref<HTMLVideoElement>();
 const isPlaying = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
-const volume = ref(1);
 const isMuted = ref(false);
 const isFullscreen = ref(false);
 const isLoading = ref(false);
@@ -85,16 +84,6 @@ function handleSeek(event: Event) {
   const time = (parseFloat(target.value) / 100) * duration.value;
   if (videoRef.value) {
     videoRef.value.currentTime = time;
-  }
-}
-
-function handleVolumeChange(event: Event) {
-  const target = event.target as HTMLInputElement;
-  const vol = parseFloat(target.value);
-  if (videoRef.value) {
-    videoRef.value.volume = vol;
-    volume.value = vol;
-    isMuted.value = vol === 0;
   }
 }
 

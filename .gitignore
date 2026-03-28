@@ -4,3 +4,7 @@ target
 .DS_Store
 .env
 .dev.vars
+backend/.wrangler/
+manim-engine/__pycache__/
+manim-engine/.venv/
+*.pyc

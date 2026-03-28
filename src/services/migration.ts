@@ -95,6 +95,12 @@ export async function runMigration(): Promise<{
   failed: number;
   error?: string;
 }> {
+  // Skip if not in Tauri environment
+  if (typeof window === 'undefined' || !(window as any).__TAURI__) {
+    markMigrationCompleted();
+    return { success: true, migrated: 0, failed: 0 };
+  }
+
   // Check if migration already completed
   if (isMigrationCompleted()) {
     return { success: true, migrated: 0, failed: 0 };

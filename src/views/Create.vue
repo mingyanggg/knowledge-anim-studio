@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { useRoute } from "vue-router";
 import VideoPlayer from "../components/VideoPlayer.vue";
 import Toast from "../components/Toast.vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 
-const router = useRouter();
 const route = useRoute();
 
 // ==================== 输入状态 ====================
@@ -71,7 +69,7 @@ const selectedVisualStyle = ref<VisualStyle>(visualStyles[0]);
 
 // ==================== 生成状态 ====================
 
-type GenerationPhase = "idle" | "generating" | "rendering" | "done";
+type GenerationPhase = "idle" | "generating" | "rendering" | "done" | "error";
 const phase = ref<GenerationPhase>("idle");
 const progress = ref(0);
 const statusMessage = ref("");
@@ -182,16 +180,10 @@ async function handleGenerate() {
         });
 
         stopProgress = true;
-          stopProgress = true;
-          progress.value = 100;
-          statusMessage.value = "生成完成！";
-          videoPath.value = result.output_path;
-          progress.value = 100;
-          statusMessage.value = "生成完成！";
-          phase.value = "done";
-        } else {
-          throw new Error(result.log || "视频渲染失败");
-        }
+        progress.value = 100;
+        statusMessage.value = "生成完成！";
+        videoPath.value = result.output_path;
+        phase.value = "done";
       } catch (renderError: any) {
         console.error("Render error:", renderError);
         const errMsg = String(renderError || "");

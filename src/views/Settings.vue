@@ -44,7 +44,7 @@ const currentPlan = computed(() => {
 const usagePercent = computed(() => {
   const state = subscriptionStore.state;
   if (!state.usageLimit || state.usageLimit === -1) return 0;
-  return Math.min((state.usageCount / state.usageLimit) * 100, 100);
+  return Math.min(((state.usageCount || 0) / state.usageLimit) * 100, 100);
 });
 
 const usageText = computed(() => {
@@ -84,20 +84,6 @@ onMounted(async () => {
     apiStatus.value = 'disconnected';
   }
 });
-
-const handleSaveSettings = () => {
-  settingsStore.updateSettings({
-    exportFormat: exportFormat.value,
-    resolution: resolution.value,
-    fps: fps.value,
-    theme: theme.value,
-  });
-  testResult.value = { success: true, message: "设置已保存" };
-  showTestResult.value = true;
-  setTimeout(() => {
-    showTestResult.value = false;
-  }, 3000);
-};
 
 const handleActivateCode = async () => {
   if (!activationCode.value.trim()) {

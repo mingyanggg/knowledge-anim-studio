@@ -3,8 +3,6 @@
  * 通过 Cloudflare Workers 后端调用 Gemini API 生成动画脚本
  */
 
-import type { StylePreset } from '../data/style-presets'
-
 /** 生成请求参数 */
 export interface GenerateRequest {
   user_id: string
@@ -165,7 +163,7 @@ export async function exportScriptFile(
 ): Promise<string> {
   // 这个功能在浏览器端使用 Blob 下载降级
   // 如果在 Tauri 环境中，可以尝试调用 Tauri API
-  if (window.__TAURI__) {
+  if (typeof window !== 'undefined' && (window as any).__TAURI__) {
     const { invoke } = await import('@tauri-apps/api/core')
     return invoke<string>('export_script_file', { script, filename })
   }

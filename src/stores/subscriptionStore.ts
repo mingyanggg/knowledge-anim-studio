@@ -5,6 +5,9 @@ interface SubscriptionState {
   isPro: boolean;
   expiryDate: string | null;
   activatedCodes: string[];
+  plan?: string;
+  usageLimit?: number;
+  usageCount?: number;
 }
 
 export const useSubscriptionStore = defineStore("subscription", () => {
