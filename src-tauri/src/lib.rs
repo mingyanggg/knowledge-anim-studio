@@ -27,6 +27,7 @@ pub fn run() {
             manim::check_manim_installed,
             manim::generate_script,
             manim::render_animation,
+            manim::render_with_audio,
             manim::export_gif,
             manim::export_to_path,
             // Subscription commands

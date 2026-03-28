@@ -284,3 +284,130 @@ pub async fn export_to_path(source_path: String, dest_path: String) -> Result<St
         .map_err(|e| format!("Failed to copy file: {}", e))?;
     Ok(dest_path)
 }
+
+/// Extract narration text from YAML scene objects (type "text")
+fn extract_narration_from_yaml(yaml: &str) -> String {
+    let mut texts = Vec::new();
+    let mut in_objects = false;
+    let mut brace_depth = 0;
+
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("objects:") {
+            in_objects = true;
+            brace_depth = 0;
+            continue;
+        }
+        if in_objects {
+            if trimmed.starts_with("- name:") || trimmed.starts_with("animations:") {
+                break;
+            }
+            if trimmed.starts_with("text:") {
+                let text_val = trimmed.trim_start_matches("text:").trim().trim_matches('"').trim_matches('\'');
+                if !text_val.is_empty() && !text_val.contains("{") {
+                    texts.push(text_val.to_string());
+                }
+            }
+        }
+    }
+
+    texts.join("。")
+}
+
+/// Render animation with TTS narration
+#[tauri::command]
+pub async fn render_with_audio(
+    script: String,
+    narration_style: String,
+) -> Result<RenderResult, String> {
+    use std::time::Instant;
+    let start = Instant::now();
+
+    // Step 1: Render the video (reuse existing logic)
+    let video_result = render_animation(script.clone()).await?;
+    let video_path = PathBuf::from(&video_result.output_path);
+
+    // Step 2: Extract narration text and generate TTS
+    let narration_text = extract_narration_from_yaml(&script);
+    if narration_text.is_empty() {
+        eprintln!("[render_with_audio] No text found for narration, returning video as-is");
+        return Ok(video_result);
+    }
+
+    eprintln!("[render_with_audio] Narration text ({} chars), style={}", narration_text.len(), narration_style);
+
+    let tts_script = PathBuf::from(MANIM_OUTPUT_DIR).parent()
+        .unwrap_or(&PathBuf::from("."))
+        .join("manim-engine")
+        .join("tts.py");
+
+    let audio_path = PathBuf::from(MANIM_OUTPUT_DIR).join("narration.mp3");
+    let merged_path = PathBuf::from(MANIM_OUTPUT_DIR).join("final_with_audio.mp4");
+
+    let child = Command::new(MANIM_PYTHON)
+        .args([
+            tts_script.to_str().unwrap(),
+            &narration_text,
+            "-o", audio_path.to_str().unwrap(),
+            "-s", &narration_style,
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn TTS: {}", e))?;
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("TTS process failed: {}", e))?;
+
+    let stderr_log = String::from_utf8_lossy(&output.stderr).to_string();
+    eprintln!("[render_with_audio] TTS stderr: {}", &stderr_log[..stderr_log.len().min(300)]);
+
+    if !output.status.success() || !audio_path.exists() {
+        eprintln!("[render_with_audio] TTS failed, returning video without audio");
+        return Ok(video_result);
+    }
+
+    // Step 3: Merge audio with video using tts.py's merge function
+    let merge_script = tts_script.clone();
+    let child = Command::new(MANIM_PYTHON)
+        .args([
+            "-c",
+            &format!(
+                "import sys; sys.path.insert(0, '{}'); from tts import merge_audio_with_video; \
+                 import json; result = merge_audio_with_video('{}', '{}', '{}'); \
+                 print(json.dumps(result, ensure_ascii=False))",
+                merge_script.parent().unwrap().display(),
+                video_path.display(),
+                audio_path.display(),
+                merged_path.display(),
+            ),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn merge: {}", e))?;
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("Merge process failed: {}", e))?;
+
+    if !output.status.success() {
+        eprintln!("[render_with_audio] Merge failed, returning video without audio");
+        return Ok(video_result);
+    }
+
+    let elapsed = start.elapsed().as_secs_f64();
+
+    if merged_path.exists() {
+        eprintln!("[render_with_audio] Final video with audio: {}", merged_path.display());
+        Ok(RenderResult {
+            success: true,
+            output_path: merged_path.to_string_lossy().to_string(),
+            format: "mp4".to_string(),
+            duration_secs: elapsed,
+            log: video_result.log.clone() + "\n[Audio narration added]",
+        })
+    } else {
+        eprintln!("[render_with_audio] Merged file not found, returning original video");
+        Ok(video_result)
+    }
+}

@@ -181,8 +181,9 @@ async function handleGenerate() {
     if (data.script) {
       try {
         statusMessage.value = "正在生成动画场景...";
-        const result = await invoke<any>("render_animation", {
+        const result = await invoke<any>("render_with_audio", {
           script: data.script,
+          narrationStyle: selectedNarrationStyle.value.id,
         });
 
         if (result.success && result.output_path) {
