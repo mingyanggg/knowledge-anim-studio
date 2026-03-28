@@ -51,14 +51,14 @@ class EnhancedYamlRenderer:
 
         # Try to import optional physics/chemistry libraries
         try:
-            from manim_physics import *
+            import manim_physics
             self.has_physics = True
             logger.info("manim_physics loaded successfully")
         except ImportError:
             logger.warning("manim_physics not available, physics objects will use fallback")
 
         try:
-            from manim_chemistry import *
+            import manim_chemistry
             self.has_chemistry = True
             logger.info("manim_chemistry loaded successfully")
         except ImportError:
@@ -117,7 +117,6 @@ class EnhancedYamlRenderer:
         script_lines.append("")
         script_lines.append(f"class {scene_name}(Scene):")
         script_lines.append(f"    def construct(self):")
-        script_lines.append(f"        config.frame_size = [{resolution[0]/10}, {resolution[1]/10}]")
         script_lines.append("")
 
         # Build objects
@@ -371,7 +370,7 @@ class EnhancedYamlRenderer:
         """Create number line."""
         x_range = params.get('x_range', [-5, 5])
         color = params.get('color', '#FFFFFF')
-        label_direction = params.get('label_direction', DOWN)
+        label_direction = params.get('label_direction', 'DOWN')
 
         return f"        {var_name} = NumberLine(x_range={x_range}, color='{color}', label_direction={label_direction})"
 
@@ -467,18 +466,14 @@ class EnhancedYamlRenderer:
         """Create decorative background."""
         gradient_colors = params.get('gradient_colors', ['#000000', '#1a1a2e'])
         opacity = params.get('opacity', 0.8)
-
-        if len(gradient_colors) >= 2:
-            colors_str = str(gradient_colors).replace("'", '"')
-            return f"        {var_name} = Rectangle(config.frame_size[0], config.frame_size[1], gradient={colors_str}, fill_opacity={opacity}).set_z_index(-1)"
-        else:
-            return f"        {var_name} = Rectangle(config.frame_size[0], config.frame_size[1], color='{gradient_colors[0]}', fill_opacity={opacity}).set_z_index(-1)"
+        bg_color = gradient_colors[0] if gradient_colors else '#000000'
+        return f"        {var_name} = FullScreenRectangle(fill_color='{bg_color}', fill_opacity={opacity}).set_z_index(-1)"
 
     def _create_braces(self, params: Dict, var_name: str) -> str:
         """Create braces annotation."""
         target_ref = params.get('target_ref', '')
         label = params.get('label', '')
-        direction = params.get('direction', DOWN)
+        direction = params.get('direction', 'DOWN')
 
         return f"""        {var_name}_brace = Brace({target_ref}_obj, {direction})
         {var_name}_label = {var_name}_brace.get_text('{label}')
